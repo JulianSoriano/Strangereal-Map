@@ -1,0 +1,845 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Strangereal Theatre Log</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: cockpit briefing — mission list left, 3D tactical map centre, intel dossier right; stacks on phones */
+:root{
+  --bg:#03070e;
+  --panel:#07101d;
+  --line:#1b3350;
+  --hud:#9fe3ff;
+  --hud-dim:#4f7fa8;
+  --text:#d8e6f3;
+  --muted:#7d94ad;
+  --friendly:#3f7dff;
+  --hostile:#ff4f4f;
+  --involved:#f5c04a;
+  --display:"Chakra Petch","Arial Narrow",sans-serif;
+  --body:"Barlow","Segoe UI",Arial,sans-serif;
+  --mono:"Share Tech Mono","Consolas",monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.5}
+.app{display:grid;grid-template-columns:1fr;gap:12px;padding-block:12px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+@media(min-width:1000px){
+  html,body{height:100%;overflow:hidden}
+  .app{height:100%;grid-template-columns:290px minmax(0,1fr) 370px;grid-template-rows:auto minmax(0,1fr)}
+  .topbar{grid-column:1/-1}
+  .panel{min-height:0;overflow:auto}
+}
+.topbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 20px;border-bottom:1px solid var(--line);padding-bottom:10px}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.brand h1{margin:0;font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.14em;color:var(--hud);text-transform:uppercase}
+.brand span{font-family:var(--mono);color:var(--muted);font-size:12px;letter-spacing:.1em}
+.readouts{display:flex;gap:18px;font-family:var(--mono);font-size:12px;color:var(--muted);flex-wrap:wrap}
+.readouts b{color:var(--hud);font-weight:400}
+.panel{background:var(--panel);border:1px solid var(--line);position:relative}
+.panel::before,.panel::after{content:"";position:absolute;width:10px;height:10px;border-color:var(--hud-dim);border-style:solid;pointer-events:none}
+.panel::before{top:-1px;left:-1px;border-width:2px 0 0 2px}
+.panel::after{bottom:-1px;right:-1px;border-width:0 2px 2px 0}
+.ph{font-family:var(--display);font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);padding:10px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;position:sticky;top:0;background:var(--panel);z-index:1}
+.ph b{color:var(--hud);font-weight:600}
+/* mission list */
+.missions{list-style:none;margin:0;padding:6px 0}
+.mission{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;cursor:pointer;border-left:3px solid transparent}
+.mission:hover{background:rgba(159,227,255,.05)}
+.mission:focus-visible{outline:1px solid var(--hud);outline-offset:-2px}
+.mission.sel{background:rgba(159,227,255,.09);border-left-color:var(--hud)}
+.mission .yr{font-family:var(--mono);font-size:13px;color:var(--hud-dim)}
+.mission.sel .yr{color:var(--hud)}
+.mission .t{min-width:0}
+.mission .t strong{display:block;font-family:var(--display);font-weight:600;font-size:14px;letter-spacing:.04em;line-height:1.25}
+.mission .t small{display:block;color:var(--muted);font-size:12.5px;line-height:1.3}
+.mission.incident .t strong{color:var(--muted);font-weight:500}
+.tag{font-family:var(--mono);font-size:10px;letter-spacing:.08em;padding:1px 5px;border:1px solid var(--line);color:var(--muted);margin-left:6px;vertical-align:1px;white-space:nowrap}
+.logbtn{font-family:var(--mono);font-size:11px;letter-spacing:.08em;background:none;border:1px solid var(--line);color:var(--muted);padding:3px 6px;cursor:pointer}
+.logbtn[aria-pressed="true"]{border-color:var(--hud);color:var(--bg);background:var(--hud)}
+.logbtn:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+.allbtn{width:calc(100% - 24px);margin:4px 12px 12px;font-family:var(--display);letter-spacing:.15em;font-size:12px;background:none;color:var(--hud);border:1px dashed var(--hud-dim);padding:7px;cursor:pointer;text-transform:uppercase}
+/* map */
+.mapwrap{position:relative;min-height:62vh;border:1px solid var(--line);overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#0a1830 0%,var(--bg) 70%)}
+@media(min-width:1000px){.mapwrap{min-height:0}}
+#gl{position:absolute;inset:0;display:block;width:100%;height:100%;cursor:grab}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lbl{position:absolute;transform:translate(-50%,-150%);font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--hud);white-space:nowrap;text-shadow:0 0 4px #000,0 0 8px #000;pointer-events:auto;cursor:pointer;padding:1px 3px}
+.lbl.dim{color:var(--hud-dim);opacity:.55}
+.lbl.friendly{color:var(--friendly)}.lbl.hostile{color:var(--hostile)}.lbl.involved{color:var(--involved)}
+.lbl.sel{outline:1px solid currentColor;background:rgba(0,0,0,.55)}
+.clbl{position:absolute;transform:translate(-50%,-50%);font-family:var(--display);font-size:13px;letter-spacing:.5em;color:rgba(159,227,255,.22);white-space:nowrap;text-transform:uppercase}
+.olbl{font-family:var(--body);font-style:italic;letter-spacing:.2em;font-size:11px;color:rgba(159,227,255,.28)}
+.hud-corner{position:absolute;font-family:var(--mono);font-size:11px;color:var(--muted);pointer-events:none;letter-spacing:.06em}
+.hud-tl{top:10px;left:12px}.hud-br{bottom:10px;right:12px;text-align:right}.hud-bl{bottom:10px;left:12px}
+.legend{display:flex;gap:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;margin-right:5px;vertical-align:0}
+.reticle{position:absolute;left:50%;top:50%;width:46px;height:46px;transform:translate(-50%,-50%);pointer-events:none;opacity:.35}
+/* dossier */
+.dossier{padding:14px 16px 18px;display:grid;gap:14px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.dossier h2{margin:2px 0 0;font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.06em;line-height:1.15;text-wrap:balance;color:var(--hud)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:13.5px;margin:0}
+.facts dt{font-family:var(--mono);color:var(--muted);font-size:12px;letter-spacing:.06em}
+.facts dd{margin:0}
+.dossier p{margin:0;max-width:65ch}
+.entries{display:grid;gap:12px}
+.entry{border-left:2px solid var(--line);padding:2px 0 2px 12px}
+.entry.friendly{border-left-color:var(--friendly)}.entry.hostile{border-left-color:var(--hostile)}.entry.involved{border-left-color:var(--involved)}
+.entry h3{margin:0;font-family:var(--display);font-size:15px;font-weight:600;letter-spacing:.03em;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.entry h3 .y{font-family:var(--mono);font-weight:400;color:var(--muted);font-size:12px}
+.role{font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase}
+.role.friendly{color:var(--friendly)}.role.hostile{color:var(--hostile)}.role.involved{color:var(--involved)}
+.entry p{font-size:14px;color:var(--text);margin-top:3px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-family:var(--mono);font-size:12px;background:none;border:1px solid var(--line);color:var(--text);padding:3px 8px;cursor:pointer}
+.chip.friendly{border-color:var(--friendly);color:var(--friendly)}.chip.hostile{border-color:var(--hostile);color:var(--hostile)}.chip.involved{border-color:var(--involved);color:var(--involved)}
+.chip:focus-visible,.allbtn:focus-visible,.back:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+.back{justify-self:start;font-family:var(--mono);font-size:12px;background:none;border:none;color:var(--hud);cursor:pointer;padding:0;letter-spacing:.08em}
+.note{font-size:12.5px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px}
+.beats{margin:0;padding-left:22px;display:grid;gap:6px;font-size:14px}
+.beats li::marker{font-family:var(--mono);color:var(--hud-dim);font-size:12px}
+.empty{color:var(--muted);font-style:italic}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+:root{--panel2:#0a1628;--line2:#12253c;--dlc:#f5c04a;--orig:#c9a6ff}
+.tabs{display:flex;gap:0;border:1px solid var(--line)}
+.tabs button{font-family:var(--display);font-size:12px;letter-spacing:.18em;text-transform:uppercase;background:none;color:var(--muted);border:none;padding:7px 14px;cursor:pointer}
+.tabs button+button{border-left:1px solid var(--line)}
+.tabs button[aria-selected="true"]{background:var(--hud);color:var(--bg)}
+.tabs button:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+#hangar{display:grid;gap:12px;grid-column:1/-1;align-content:start}
+#hangar .hstats{display:flex;gap:18px;font-family:var(--mono);font-size:12px;color:var(--muted);flex-wrap:wrap}
+#hangar .hstats b{color:var(--hud);font-weight:400}
+@media(min-width:1000px){#hangar{min-height:0;grid-template-rows:auto auto auto minmax(0,1fr) auto}#hangar .board{max-height:none;min-height:0}}
+#hangar .controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#hangar .controls input{background:var(--panel);border:1px solid var(--line);color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 10px;min-width:0;width:240px;max-width:100%}
+#hangar .controls input:focus-visible,#hangar button:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+#hangar .chips{display:flex;flex-wrap:wrap;gap:6px}
+#hangar .chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;background:none;border:1px solid var(--line);color:var(--text);padding:4px 8px;cursor:pointer;text-decoration:none}
+#hangar .chip:hover{border-color:var(--hud-dim)}
+#hangar .chip.on{background:var(--hud);color:var(--bg);border-color:var(--hud)}
+#hangar .legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--muted);align-items:center}
+#hangar .legend span{display:inline-flex;align-items:center;gap:6px}
+#hangar .status{font-family:var(--mono);font-size:12px;color:var(--hud)}
+#hangar .board{border:1px solid var(--line);background:var(--panel);overflow:auto;max-height:72vh;position:relative}
+@media(max-width:700px){#hangar .board{max-height:none}}
+#hangar table{border-collapse:separate;border-spacing:0;width:100%;min-width:900px;font-variant-numeric:tabular-nums}
+#hangar th,#hangar td{padding:0;border-bottom:1px solid var(--line2)}
+#hangar thead th{position:sticky;top:0;z-index:3;background:var(--panel2);border-bottom:1px solid var(--line);font-weight:400}
+#hangar .gh{width:52px;min-width:46px;text-align:center;cursor:pointer;padding:8px 2px 7px;user-select:none}
+#hangar .gh b{display:block;font-family:var(--display);font-weight:600;font-size:13px;letter-spacing:.04em;color:var(--text)}
+#hangar .gh small{display:block;font-family:var(--mono);font-size:10px;color:var(--muted)}
+#hangar .gh i{display:block;font-style:normal;font-family:var(--mono);font-size:10px;color:var(--hud-dim);margin-top:2px}
+#hangar .gh:hover b{color:var(--hud)}
+#hangar .gh.on{background:#10325a}
+#hangar .gh.on b{color:var(--hud)}
+#hangar .namecol{position:sticky;left:0;z-index:2;background:var(--panel);text-align:left;min-width:250px;width:300px}
+#hangar thead .namecol{z-index:4;background:var(--panel2);padding:8px 12px;font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.1em;vertical-align:bottom}
+#hangar .cnt{width:44px;text-align:center;font-family:var(--mono);font-size:12px;color:var(--muted)}
+#hangar thead .cnt{font-size:10px;letter-spacing:.08em;vertical-align:bottom;padding-bottom:8px}
+#hangar tr.maker td{background:var(--bg);border-bottom:1px solid var(--line);padding:14px 12px 7px}
+#hangar tr.maker td.namecol{background:var(--bg)}
+#hangar .mk{font-family:var(--display);font-weight:700;font-size:16px;letter-spacing:.16em;text-transform:uppercase;color:var(--hud)}
+#hangar .mk small{font-family:var(--mono);font-weight:400;font-size:11px;letter-spacing:.06em;color:var(--muted);margin-left:10px;text-transform:none}
+#hangar tr.maker.originals .mk{color:var(--orig)}
+#hangar tr.fam td.namecol{padding:8px 12px 3px 12px}
+#hangar .fm{font-family:var(--display);font-weight:600;font-size:13.5px;letter-spacing:.04em;color:var(--text)}
+#hangar .fm small{font-family:var(--mono);font-weight:400;font-size:10.5px;color:var(--muted);margin-left:8px;letter-spacing:.04em}
+#hangar tr.fam td{border-bottom:none}
+#hangar tr.v td.namecol{padding:4px 12px 4px 30px;position:sticky}
+#hangar tr.v td.namecol::before{content:"";position:absolute;left:16px;top:0;bottom:0;border-left:1px solid var(--line)}
+#hangar tr.v td.namecol::after{content:"";position:absolute;left:16px;top:50%;width:9px;border-top:1px solid var(--line)}
+#hangar tr.v.last td.namecol::before{bottom:50%}
+#hangar .vn{font-family:var(--mono);font-size:13px;color:var(--text)}
+#hangar .vnote{display:block;font-size:11.5px;color:var(--muted);line-height:1.3}
+#hangar tr.v:hover td{background:#0c1d33}
+#hangar tr.v:hover td.namecol{background:#0c1d33}
+#hangar td.c{text-align:center;height:28px}
+#hangar td.c.on{background:rgba(159,227,255,.05)}
+#hangar .dot{display:inline-block;width:10px;height:10px;transform:rotate(45deg);background:var(--hud);box-shadow:0 0 6px rgba(159,227,255,.45)}
+#hangar .dot.d{background:none;border:1.5px solid var(--dlc);box-shadow:none}
+#hangar tr.v.orig .dot:not(.d){background:var(--orig);box-shadow:0 0 6px rgba(201,166,255,.4)}
+#hangar td.c.on .dot{transform:rotate(45deg) scale(1.2)}
+#hangar .foot{font-size:12.5px;color:var(--muted);max-width:90ch;display:grid;gap:6px}
+#hangar .foot p{margin:0}
+#hangar .empty{padding:28px;color:var(--muted);font-style:italic;text-align:center}
+
+[hidden]{display:none!important}
+#timeline{display:grid;gap:12px;grid-column:1/-1;align-content:start}
+@media(min-width:1000px){#timeline{min-height:0;grid-template-rows:auto minmax(0,1fr) auto}}
+#timeline .tlbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+#timeline input[type=search]{flex:1 1 220px;max-width:360px;background:var(--panel);border:1px solid var(--line);color:var(--text);font:14px var(--body);padding:8px 10px}
+#timeline .tlchips{display:flex;flex-wrap:wrap;gap:6px}
+#timeline .tlchips button{font-family:var(--mono);font-size:12px;letter-spacing:.06em;background:none;border:1px solid var(--line);color:var(--muted);padding:5px 9px;cursor:pointer}
+#timeline .tlchips button[aria-pressed="true"]{border-color:var(--hud);color:var(--hud)}
+#timeline .tlchips button:focus-visible,#timeline input:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+#timeline .tlscroll{overflow:auto;border:1px solid var(--line);background:var(--panel);padding:6px 16px 18px;min-height:320px}
+#timeline .era{position:sticky;top:0;z-index:2;background:var(--panel);border-bottom:1px solid var(--line);margin:0 -16px;padding:10px 16px;font-family:var(--display);letter-spacing:.16em;text-transform:uppercase;font-size:13px;color:var(--hud)}
+#timeline .era small{font-family:var(--mono);color:var(--hud-dim);letter-spacing:.06em;margin-left:8px;text-transform:none}
+#timeline .row{display:grid;grid-template-columns:92px minmax(0,1fr);gap:14px;padding:8px 0;border-bottom:1px solid var(--line2)}
+#timeline .when{font-family:var(--mono);font-size:12.5px;color:var(--hud-dim);padding-top:2px}
+#timeline .when b{display:block;color:var(--text);font-size:14px;font-weight:400}
+#timeline .what{font-size:14px;line-height:1.45}
+#timeline .row.war .what{color:var(--text)}
+#timeline .row.minor .what{color:var(--muted)}
+#timeline .wartag{display:inline-block;font-family:var(--mono);font-size:11px;letter-spacing:.08em;border:1px solid var(--hud-dim);color:var(--hud);padding:1px 6px;margin-right:8px;vertical-align:1px}
+#timeline .gamelink{background:none;border:none;color:var(--hud);font:inherit;cursor:pointer;text-decoration:underline;padding:0}
+#timeline .foot{font-size:12.5px;color:var(--muted);max-width:90ch}
+@media(max-width:560px){#timeline .row{grid-template-columns:70px minmax(0,1fr);gap:10px}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><h1>Strangereal Theatre Log</h1><span id="brand-sub">WAR RECORD · 1995–2040</span></div>
+    <nav class="tabs" role="tablist" aria-label="View"><button type="button" role="tab" id="tab-theatre" aria-selected="true" aria-controls="theatre">Theatre map</button><button type="button" role="tab" id="tab-hangar" aria-selected="false" aria-controls="hangar">Hangar</button><button type="button" role="tab" id="tab-timeline" aria-selected="false" aria-controls="timeline">Timeline</button></nav>
+    <div class="readouts" id="readouts">
+      <div>THEATRE <b id="r-theatre">ALL</b></div>
+      <div>YEAR <b id="r-year">—</b></div>
+      <div>LOGGED <b id="r-logged">0/0</b></div>
+    </div>
+  </header>
+
+  <aside class="panel tv" aria-label="Wars and games">
+    <div class="ph"><span>Operations</span><b>Chronological</b></div>
+    <button class="allbtn" id="allbtn" type="button">Show full theatre</button>
+    <ul class="missions" id="missions"></ul>
+  </aside>
+
+  <main class="mapwrap tv" id="mapwrap">
+    <canvas id="gl" aria-label="3D map of Strangereal. Drag to rotate, scroll or pinch to zoom, tap a country marker for its record."></canvas>
+    <div id="labels"></div>
+    <svg class="reticle" viewBox="0 0 46 46" aria-hidden="true"><g fill="none" stroke="#9fe3ff" stroke-width="1.2"><path d="M4 14V4h10M32 4h10v10M42 32v10H32M14 42H4V32"/><circle cx="23" cy="23" r="2"/></g></svg>
+    <div class="hud-corner hud-tl" id="hud-tl">AFTER OFFICIAL AC8 WORLD MAP · STYLISED</div>
+    <div class="hud-corner hud-bl legend" aria-label="Legend">
+      <span><i style="background:var(--friendly)"></i>PLAYER SIDE</span>
+      <span><i style="background:var(--hostile)"></i>HOSTILE</span>
+      <span><i style="background:var(--involved)"></i>INVOLVED</span>
+    </div>
+    <div class="hud-corner hud-br">DRAG · ROTATE<br>SCROLL · ZOOM</div>
+  </main>
+
+  <aside class="panel tv" aria-label="Intel">
+    <div class="ph"><span id="intel-h">Briefing</span><b id="intel-code">—</b></div>
+    <div class="dossier" id="dossier"></div>
+  </aside>
+
+  <section id="hangar" aria-label="Hangar: playable aircraft by real-world maker" hidden>
+  <div class="hstats" id="stats"></div>
+  <div class="controls">
+    <input id="q" type="search" placeholder="Search aircraft, e.g. Su-47" aria-label="Search aircraft">
+    <nav class="chips" id="makers" aria-label="Jump to maker"></nav>
+  </div>
+  <div class="legend">
+    <span><i class="dot"></i>Playable</span>
+    <span><i class="dot d"></i>DLC / pre-order</span>
+    <span><i class="dot" style="background:var(--orig);box-shadow:none"></i>Strangereal original</span>
+    <span>Tap a game column to show only its roster</span>
+    <span class="status" id="status" aria-live="polite"></span>
+  </div>
+  <div class="board" id="board"><table id="t"></table></div>
+  <div class="foot">
+    <p>Rosters come from each game's aircraft page on the Ace Combat Wiki. Air Combat, Ace Combat 2 and Ace Combat 04 used short in-game names (F-15, EF-2000, TND-IDS, R-M01, SF-39); these are matched to the nearest real variant. SF-35 and SF-39 are read as the Saab Draken and Gripen. Top Gun: Maverick versions of the F-14A and F/A-18E in Ace Combat 7 are folded into those rows.</p>
+    <p>Ace Combat 3's corporate-era jets are placed under the real aircraft they descend from. Neucom, Ouroboros and Northern Wings designs have no real maker, so they sit with the other Strangereal originals; Northern Wings notes say which real jet each resembles.</p>
+  </div>
+</section>
+  <section id="timeline" aria-label="Strangereal timeline" hidden>
+    <div class="tlbar">
+      <input id="tlq" type="search" placeholder="Search the timeline, e.g. Excalibur" aria-label="Search timeline">
+      <div class="tlchips" id="tlchips" role="group" aria-label="Filter"></div>
+      <span class="status" id="tlstatus" aria-live="polite" style="font-family:var(--mono);font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div class="tlscroll" id="tlscroll"></div>
+    <div class="foot">Dates through 1999 follow the Ace Combat Wiki's Strangereal timeline (a condensed reading; minor enlistments and transfers are left out). The wiki page I could reach stops partway through 1999, so entries from 2000 on come from the war briefings in this log rather than the timeline page.</div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* ---------- DATA ---------- */
+const COUNTRIES = {
+  osea:{name:"Osean Federation",short:"OSEA",cont:"Osea",capital:"Oured",pos:[-70.9, -10.5],about:"The largest military power in Strangereal and the setting or a participant in more wars than any other nation."},
+  belka:{name:"Belka",short:"BELKA",cont:"Osea",capital:null,pos:[-61.0, -21.5],about:"A northern Osean power whose 1995 war, nuclear self-destruction and nationalist remnants shape decades of conflict. Split after the war into North Osea and the Principality of Belka."},
+  ustio:{name:"Republic of Ustio",short:"USTIO",cont:"Osea",capital:"Directus",pos:[-59.8, -15.0],about:"A small mountain republic that broke away from Belka; it hired mercenaries to survive the Belkan War."},
+  gebet:{name:"Gebet",short:"GEBET",cont:"Osea",capital:null,pos:[-54.4, -19.7],about:"Broke away from Belka in 1988. Fought on the Allied side in the Belkan War."},
+  fato:{name:"Fato",short:"FATO",cont:"Osea",capital:null,pos:[-47.9, -22.0],about:"Bought part of North Belka in 1991; lost a fighter squadron in the opening battle of the Belkan War."},
+  recta:{name:"Recta",short:"RECTA",cont:"Osea",capital:null,pos:[-55.6, -16.7],about:"Annexed by Belka in the 1970s and later independent. Rejected Belka's 1990s claim over its territory."},
+  nordlands:{name:"Nordlands",short:"NORDLANDS",cont:"Osea",capital:null,pos:[-38.0, -16.3],minor:true,about:"An Osean-continent nation shown on the official map. No major game events recorded here."},
+  wielvakia:{name:"Wielvakia",short:"WIELVAKIA",cont:"Osea",capital:null,pos:[-46.4, -12.1],minor:true,about:"An Osean-continent nation shown on the official map. No major game events recorded here."},
+  ratio:{name:"Ratio",short:"RATIO",cont:"Osea",capital:null,pos:[-49.8, -8.2],minor:true,about:"An Osean-continent nation shown on the official map. No major game events recorded here."},
+  verusa:{name:"Verusa",short:"VERUSA",cont:"Verusa",capital:null,pos:[85.3, 16.3],minor:true,about:"The nation that shares its name with the continent, in Verusa's south-east. No major game events recorded."},
+  sapin:{name:"Kingdom of Sapin",short:"SAPIN",cont:"Osea",capital:null,pos:[-54.1, -5.4],about:"A western Osean kingdom on the Allied side of the Belkan War."},
+  wellow:{name:"Wellow",short:"WELLOW",cont:"Wellow",capital:null,pos:[-61.9, -46.4],about:"The only nation on the small northern continent of Wellow. No conflicts recorded."},
+  yuktobania:{name:"Union of Yuktobanian Republics",short:"YUKTOBANIA",cont:"Verusa",capital:"Cinigrad",pos:[73.8, -10.5],about:"Osea's long-time rival across the ocean; ally in 1995, enemy in 2010, partner again by the end of that war."},
+  sotoa:{name:"Republic of Sotoa",short:"SOTOA",cont:"Verusa",capital:null,pos:[41.8, 3.3],about:"A Verusan republic across the Aurum Sea from Usea, with a nomadic heritage strained by drought. The aggressor of 2029–30."},
+  erusea:{name:"Erusea",short:"ERUSEA",cont:"Usea",capital:"Farbanti",pos:[-21.5, -12.8],about:"The dominant power of western Usea: a federal republic in the Continental War and a monarchy by the Lighthouse War. It started both the Continental War and the Lighthouse War, and its Free Erusea rebels rose twice in between."},
+  fcu:{name:"Federation of Central Usea (FCU)",short:"FCU",cont:"Usea",capital:"Theve",pos:[0.8, -8.4],about:"Central Usea's federation: an ISAF member in 2003, reorganised after the Continental War, and invaded by Sotoa in 2029. Its wealthy west sits near the space elevator; its east lagged behind."},
+  northpoint:{name:"North Point",short:"NORTH POINT",cont:"Usea (island)",capital:null,pos:[15.0, -21.1],about:"An island nation off Usea that became ISAF's last stronghold in 2003."},
+  usea:{name:"Usean continent",short:"USEA",cont:"Usea",capital:null,pos:[-2.3, 1.9],region:true,about:"Continent-wide events that don't belong to a single country."},
+  skully:{name:"Skully Islands",short:"SKULLY IS.",cont:"South of Usea",capital:null,pos:[2.9, 20.1],region:true,about:"An island chain south of the Usean continent: site of the 1995 insurrection, and where the Usean 2nd Fleet was lost in 1998. Its exact spot on the map is not marked."},
+  emmeria:{name:"Republic of Emmeria",short:"EMMERIA",cont:"Anea",capital:"Gracemeria",pos:[69.0, -40.3],about:"A southern Anean republic, invaded by Estovakia in 2015."},
+  estovakia:{name:"Federal Republic of Estovakia",short:"ESTOVAKIA",cont:"Anea",capital:null,pos:[95.5, -40.3],about:"Northern Anean nation ruined by asteroid strikes and civil war, then the aggressor of 2015."},
+  nordennavic:{name:"Kingdom of Nordennavic",short:"NORDENNAVIC",cont:"Anea",capital:null,pos:[43.7, -47.3],about:"Northern kingdom; home of the Grendel Squadron in a mobile spin-off."},
+  aurelia:{name:"Federal Republic of Aurelia",short:"AURELIA",cont:"South Osea",capital:"Griswall",pos:[-92.6, 31.6],about:"Southern nation of South Osea, invaded in 2020."},
+  leasath:{name:"Republic of Leasath",short:"LEASATH",cont:"South Osea",capital:null,pos:[-79.6, 23.6],about:"Aurelia's northern neighbour; civil war in 2019, invasion the next year."}
+};
+
+const GAMES = [
+ {id:"ac1",code:"AC",title:"Air Combat",year:1995,war:"Skully Islands insurrection",kind:"game",tag:"CANON UNCLEAR",player:"Mercenary squadron (Scarface or Phoenix; sources differ)",
+  summary:"In 1995, unidentified rebels rose up in the Skully Islands, south of the Usean continent. Robert Tyler, commander of the FCU Army's Southern District, led an operation with mercenary support that defeated them and seized their headquarters. 'Skully Islands insurrection' is a fan name; no official one exists. It is also unclear whether the event is meant to retcon the unnamed coup in Air Combat: the premise and the year match, but the coup is missing from official timelines.",
+  cast:[["FCU","Robert Tyler, commander of the Army's Southern District"],["MERCENARIES","Scarface Squadron per Aces At War: A History; Ace Combat Infinity and Ace Combat 7 give the player's emblem to Phoenix Squadron instead. Air Combat itself only says 'mercenary squadron'."],["REBELS","Unidentified; leaders and strength unknown"]],
+  beats:["1995: Unidentified rebels take over the Skully Islands.",
+   "The FCU's Southern District, backed by mercenaries, defeats the rebels and captures their headquarters.",
+   "The same year, the Belkan War is fought on the Osean continent.",
+   "Aftermath: In the wake of both wars, Usean nations form the Usean Allied Forces. The alliance is tested two years later in the 1997 coup, where Scarface Squadron fights again."],
+  roles:{fcu:"friendly",skully:"involved"},
+  events:{fcu:"Robert Tyler of the FCU Army's Southern District leads the operation, with mercenary support, that crushes the rebels and takes their headquarters.",
+   skully:"Seized by unidentified rebels in 1995 and retaken by FCU forces and their hired mercenaries."},arcs:[]},
+ {id:"zero",code:"ZERO",title:"Ace Combat Zero: The Belkan War",year:1995,war:"Belkan War",kind:"game",player:"Cipher · Galm Team (Ustio)",
+  summary:"Belka's secret weapons programs, including the Excalibur laser, the Hresvelgr flying fortress and the V2 missile, drove it into recession. It let Gebet and Ustio break away in 1988 and sold land to Osea and others, and when a joint venture with Osea collapsed in 1991, the ultranationalist government of Waldemarr Rald came to power and declared those losses invalid. After resources were found in Area B7R on the Ustio border, Belka went to war on March 25, 1995. An Osean-led alliance drove it back; Belka detonated seven nuclear weapons on its own soil and surrendered on June 20. In December, the rogue group A World With No Boundaries tried to finish the job with a V2 from Avalon Dam.",
+  cast:[["GALM TEAM","Cipher ('Demon Lord of the Round Table'), Larry 'Pixy' Foulke, later Patrick James 'PJ' Beckett"],["ALLIES","Osean Crow Squadron, Sapinish Espada Squadron"],["BELKA","Chancellor Waldemarr Rald"],["AWWNB","A World With No Boundaries: soldiers from several nations led by Anton Kupchenko, joined by Pixy"],["WEAPONS","Excalibur laser, XB-0 Hresvelgr, ADFX-02 Morgan, V1 nukes, V2 missile"]],
+  beats:["Mar 25, 1995: Belka invades Osean and Ustian territory. It takes Model and, on March 30 at Monte Rosa, wrecks the Ustio Air Force.",
+   "Apr 1–2: Osea proposes the Allied Forces. Belka bombs Valais Air Base, where Cipher and Pixy form Galm Team and drive off the attack.",
+   "April: Osea's counter-offensive begins. Galm frees Route 171 in Arlon, a diversion over Area B7R lets the Allied 3rd Fleet into Ustio, and the carrier Njord is sunk clearing the Futuro Canal.",
+   "May 12–13: Galm helps retake Solis Ortus, and Operation Constantine frees Ustio's capital Directus.",
+   "May 17–19: The assault on the Hydrian Line uncovers Belka's V2 and nuclear programs. Excalibur hits Allied forces at the Schayne Plains.",
+   "May 23: Operation Judgment at Tauberg destroys Excalibur.",
+   "May 28: Operation Battle-Axe over Area B7R, the war's largest air battle.",
+   "Jun 1: Allied bombers hit the industrial city of Hoffnung, causing heavy casualties.",
+   "Jun 5–6: As the Allies close in at Waldreich, Belka detonates seven V1 nuclear weapons in the Waldreich Mountains, killing over 12,000 people.",
+   "Jun 13–20: Galm strikes holdouts at Mount Schirm. Belka capitulates at Lumen on June 19 and the Treaty of Lumen is signed on June 20.",
+   "Dec 25, 1995: A World With No Boundaries stages a coup and attacks Lumen and Valais with the hijacked Hresvelgr. Cipher and PJ destroy it over the Waldreich range.",
+   "Dec 31, 1995: At Avalon Dam in Mund Valley, Pixy's laser kills PJ. Cipher defeats Pixy in the Morgan and the V2 self-destructs.",
+   "January 1996: Rald falls after his links to A World With No Boundaries come out."],
+  roles:{belka:"hostile",osea:"friendly",ustio:"friendly",sapin:"friendly",yuktobania:"friendly",gebet:"friendly",recta:"involved",fato:"involved"},
+  events:{belka:"Invades on March 25, 1995, driven by recession, lost territory and an ultranationalist government. Pushed back by the Allies, it detonates seven nuclear weapons in the Waldreich Mountains and surrenders. Afterwards it is demilitarized: the south goes to Osea as North Osea, the north becomes the Principality of Belka, and its army is disbanded. Belkan nationalists later form the Grey Men.",
+   ustio:"Independent since 1988, it is overrun in the first weeks and its air force is crushed at Monte Rosa. Rebuilt around mercenaries like Galm Team at Valais Air Base, it helps free Directus in May. After the war it returns to its pre-war borders.",
+   osea:"Leads the Allied Forces, launches the counter-offensive in April and invades South Belka. It annexes the region as North Osea, where Belka's old munitions factory becomes Gründer Industries. It signs a peace treaty with Yuktobania in 1996.",
+   sapin:"Invaded by Belka, which also sinks its 3rd Naval Fleet from the air. Liberated by the Allies; its Espada Squadron fights through the war.",
+   yuktobania:"Comes to Osea's aid. The shared war starts a reconciliation that ends the Cold War with a 1996 peace treaty.",
+   gebet:"Broke away from Belka in 1988 and rejected Belka's ruling that its independence was invalid. Fights on the Allied side.",
+   recta:"Annexed by Belka in the 1970s and later independent; it rejected Belka's ruling that former territories still belonged to it.",
+   fato:"Bought part of North Belka from Belka in 1991. Its 122nd Tactical Fighter Squadron is wiped out in the war's first battle."},
+  arcs:[["belka","ustio"],["belka","sapin"],["belka","osea"],["belka","fato"]]},
+ {id:"ac2",code:"2",title:"Ace Combat 2",year:1997,war:"Usean coup d'état",kind:"game",player:"Phoenix · Scarface Squadron",
+  summary:"Usea's northern and western nations had formed the Usean Allied Forces as a counterweight to Osea and Yuktobania. When the southern nations signed the Spring Sea Treaty, a military pact with Osea, conservative extremists, some inside the Allied Forces themselves, feared Osean troops and lost mining rights. On the day of the signing, May 30, 1997, they launched a coup across the whole continent. The Allies hired the Scarface mercenary squadron to lead the fight back, which ended at Fortress Intolerance on September 18, 1998. Also called the Usean Continental War.",
+  cast:[["ALLIES","Phoenix (Scarface One) and the Scarface mercenaries; Air Force commander Ulrich Olsen; the E-767 Cassiopea"],["REBELS","Beast Squadron; Z.O.E., an AI that flies a series of ever more advanced aircraft"],["WEAPONS","Dragonet-class submarines Fensalir and Folkvangr, an anti-asteroid laser, an ICBM"]],
+  beats:["May 30, 1997: The coup breaks out across Usea on the day the Spring Sea Treaty is signed. The Allies retreat west.",
+   "Late 1997: The Allies launch Operation Fighter's Honor with Scarface Squadron as the spearhead.",
+   "Mar 20, 1998: Phoenix destroys a rebel bomber force sent against the Twinkle Islands.",
+   "Apr 5, 1998: Operation Anchorhead Freedom retakes Axel Bay and Anchorhead, sinking a rebel carrier.",
+   "Apr 14–29, 1998: Simultaneous attacks on the frontline base The Keep and the Opera House oil facility; Beast Squadron's force is destroyed in Payton Channel.",
+   "Spring–summer 1998: Rebel electronic-warfare planes and stealth bomber raids fail. The first Z.O.E. aircraft appears, withdraws without firing, and is never seen again.",
+   "June 1998: A rebel airlift fails, and Allied special forces rescue a kidnapped government VIP.",
+   "Mid-1998: The Usean 2nd Fleet is destroyed at the Skully Islands. The submarine Fensalir is sunk in Seals Bridge Ravine, and Phoenix downs a Z.O.E. YF-23A.",
+   "The Allies split in two. In the south, Operation Alphaville takes out the Turntable geothermal plant and an anti-asteroid laser at the Comona Islands. In the north, Operation Bellissima rescues the E-767 Cassiopea and stops a missile attack at Faith Park.",
+   "Battle of Saint Ark: Phoenix shoots down a jamming Z.O.E. F-15S/MTD and the city is retaken. He then sinks the submarine Folkvangr and its cruise missile.",
+   "Sep 1998: The rebels hold out at Fortress Intolerance on North Point. Phoenix downs the last Z.O.E. and destroys an ICBM inside the fortress. The war ends on September 18.",
+   "Aftermath: Remaining rebels are killed, arrested or never found. Many Allied nations go on to form ISAF in 2003."],
+  roles:{usea:"friendly",erusea:"friendly",northpoint:"involved",osea:"involved",yuktobania:"involved",skully:"involved"},events:{usea:"The coup strikes the whole continent at once and the Allies fall back west. Their counter-offensive runs east from the Twinkle Islands, retaking Axel Bay, Anchorhead and Saint Ark, and ends at North Point.",
+   erusea:"A member of the Usean Allied Forces, fighting to put down the coup.",
+   northpoint:"The rebels make their last stand at Fortress Intolerance, which had been spared demolition because of the Ulysses threat. Phoenix destroys an ICBM inside it, ending the war.",
+   osea:"Its Spring Sea Treaty with Usea's southern nations sets off the coup. It doesn't fight directly and likely lets the pact drop afterwards.",
+   yuktobania:"The target of the rebels' last ICBM, which Phoenix destroys inside Fortress Intolerance before launch.",
+   skully:"The Usean 2nd Fleet is destroyed at the Skully Islands in mid-1998."},arcs:[]},
+ {id:"ahl",code:"AHL",title:"Assault Horizon Legacy",year:1997,war:"Usean coup d'état",kind:"game",tag:"RETELLING",player:"Phoenix · Scarface Squadron",
+  summary:"A retelling of Ace Combat 2's Usean coup, May 1997 to September 1998, with an updated campaign. Same war and same mercenary unit; open the Ace Combat 2 entry for the full course of the war.",
+  roles:{usea:"friendly",erusea:"friendly",northpoint:"involved",osea:"involved",yuktobania:"involved",skully:"involved"},events:{usea:"The coup strikes the whole continent at once and the Allies fall back west. Their counter-offensive runs east from the Twinkle Islands, retaking Axel Bay, Anchorhead and Saint Ark, and ends at North Point.",
+   erusea:"A member of the Usean Allied Forces, fighting to put down the coup.",
+   northpoint:"The rebels make their last stand at Fortress Intolerance, which had been spared demolition because of the Ulysses threat. Phoenix destroys an ICBM inside it, ending the war.",
+   osea:"Its Spring Sea Treaty with Usea's southern nations sets off the coup. It doesn't fight directly and likely lets the pact drop afterwards.",
+   yuktobania:"The target of the rebels' last ICBM, which Phoenix destroys inside Fortress Intolerance before launch.",
+   skully:"The Usean 2nd Fleet is destroyed at the Skully Islands in mid-1998."},arcs:[]},
+ {id:"ulysses",code:"INC",title:"Ulysses impact",year:1999,war:"Asteroid 1994XF04",kind:"incident",
+  summary:"The asteroid Ulysses, found by Usean astronomers in 1994, breaks up and its fragments strike the planet in July 1999, killing over half a million Usean civilians in two weeks. Usea takes the worst of it. The Stonehenge railgun battery, built to shoot fragments down, and the flood of refugees set up the 2003 war; strikes on Anea push Estovakia toward collapse.",
+  roles:{usea:"involved",erusea:"involved",fcu:"involved",estovakia:"involved"},
+  events:{usea:"Fragments devastate large parts of the continent. The Stonehenge railguns defend against the worst impacts.",
+   erusea:"Agrees, like its neighbours, to take in a quota of refugees. Its decision to stop in April 2003 sets off the Continental War.",
+   fcu:"Takes part in the anti-asteroid effort and absorbs heavy damage.",
+   estovakia:"Fragment strikes wreck the country and trigger the slide into civil war."},arcs:[]},
+ {id:"nw",code:"NW",title:"Ace Combat: Northern Wings",year:1999,war:"Secret operations, 1999–2016",kind:"game",tag:"NON-CANON",player:"Grendel 1 · Grendel Squadron",
+  summary:"A top-secret Nordennavic squadron runs covert operations around the world from 1999 to 2016. The game's story is not counted as canon.",
+  roles:{nordennavic:"friendly"},events:{nordennavic:"The Royal Air Force's Grendel Squadron flies secret missions abroad, crossing paths with other wars along the way. Treated as non-canon."},arcs:[]},
+ {id:"ac04",code:"04",title:"Ace Combat 04: Shattered Skies",year:2003,war:"Continental War",kind:"game",player:"Mobius 1 · ISAF",
+  summary:"After the Ulysses fragments killed over half a million Useans in 1999, every country agreed to take in a share of refugees. In April 2003 Erusea stopped, citing its own rebuilding. Other nations boycotted its exports while refugees starved at its borders, and that summer Erusea invaded San Salvacion and seized Stonehenge, turning the anti-asteroid railguns on aircraft. The Independent State Allied Forces (ISAF) were driven back to North Point, rebuilt, and fought their way back across Usea. Erusea surrendered on September 19, 2005, after the fall of Farbanti.",
+  cast:[["ISAF","Mobius 1; FCU President Robert Sinclair, who founded ISAF"],["ERUSEA","Yellow Squadron, its elite aces, incl. Yellow 4; the rookie 'Newborn' Yellow Squadron"],["SAN SALVACION","Local resistance fighters; the war's narrator, who was a child in the city"],["WEAPONS","Stonehenge railguns, the Megalith, the Aegir Fleet"]],
+  beats:["Summer 2003: Erusea invades San Salvacion and seizes Stonehenge.",
+   "Aug 22, 2003: FCU President Robert Sinclair forms ISAF and gives Erusea until September 14 to withdraw.",
+   "Autumn 2003: ISAF's airborne assault on Stonehenge is stopped by Yellow Squadron. ISAF's headquarters at Los Canas surrenders and the coalition retreats to North Point.",
+   "Sep 19, 2004: ISAF stops an Erusean bomber raid on North Point (Operation Umbrella).",
+   "Oct 2004: ISAF raids Rigley Air Base and knocks out the radar at Mount Shezna.",
+   "Nov 23, 2004: After cutting its supplies, ISAF destroys the Aegir Fleet in Comberth Harbor.",
+   "Dec 16, 2004: ISAF shuts down the Faith Park solar plants that powered much of Erusea's war industry.",
+   "Jan 24, 2005: ISAF lands on Usea's southern coast at Caranda, Halle and Crowne beaches (Operation Bunker Shot).",
+   "Mar 14, 2005: Stonehenge engineers defect on two Air Ixiom flights; Mobius 1 escorts them to safety.",
+   "Apr 2, 2005: ISAF attacks Stonehenge. Mobius 1 destroys the jamming system and the railguns, and shoots down Yellow 4.",
+   "May 2005: Intelligence reveals the Megalith, and ISAF pushes to end the war fast.",
+   "Early July 2005: San Salvacion is liberated. ISAF then wins at the Whiskey Corridor and Erusea falls back to Farbanti.",
+   "Sep 19, 2005: ISAF besieges Farbanti. Mobius 1 shoots down the last five Yellow Squadron aircraft and Erusea surrenders.",
+   "Sep 26, 2005: Rebel officers seize the Megalith. Mobius Squadron destroys it from the inside, past the rookie 'Newborn' Yellow Squadron.",
+   "Aftermath: In 2006, Free Erusea seizes a munitions plant and attacks the new government and ISAF observers; Mobius 1 puts down the uprising."],
+  roles:{erusea:"hostile",fcu:"friendly",northpoint:"friendly",osea:"friendly",usea:"involved"},
+  events:{erusea:"Stops taking Ulysses refugees in April 2003, then invades San Salvacion and seizes Stonehenge. Its Yellow Squadron dominates the skies and its Aegir Fleet threatens North Point, but ISAF wears it down. It surrenders on September 19, 2005, after Farbanti falls and its Supreme Commander is killed. Rebel officers make a last stand at the Megalith, and Free Erusea rises against the reformed government in 2006.",
+   fcu:"Its president, Robert Sinclair, creates ISAF in August 2003 and issues Erusea's withdrawal ultimatum. ISAF's early defeats push it off the mainland until the 2005 landings.",
+   northpoint:"Hosts ISAF's headquarters after the retreat from the mainland. Mobius 1 flies from here, and the Aegir Fleet was meant to destroy it.",
+   osea:"Joins ISAF. An Osean Air Defense Force contingent takes part in the first, failed assault on Stonehenge.",
+   usea:"San Salvacion is occupied, and its resistance bombs Yellow Squadron's runway before the city is freed in July 2005. Together, Ulysses and the war cause nearly 20 million deaths and injuries. Recovery only begins in the 2010s with the space elevator, whose controversy leads to the Lighthouse War."},
+  arcs:[["erusea","fcu"],["erusea","northpoint"],["erusea","usea"]]},
+ {id:"civil07",code:"INC",title:"Estovakian Civil War",year:2007,war:"Internal conflict, to 2013",kind:"incident",
+  summary:"After Ulysses wrecked Estovakia, rival factions fought for control. A humanitarian crisis in Gledina made it worse. The war stalled until Belkan defectors gave the Eastern Faction cruiser technology, letting it build the Aerial Fleet and win in October 2013.",
+  roles:{estovakia:"involved",belka:"involved"},events:{estovakia:"Factions fight for control after the asteroid strikes. The Eastern Faction wins in October 2013 and sets up the military government known as The Generals.",belka:"Belkan defectors hand the Eastern Faction the cruiser technology that decides the civil war."},arcs:[]},
+ {id:"ac5",code:"5",title:"Ace Combat 5: The Unsung War",year:2010,war:"Circum-Pacific War",kind:"game",player:"Blaze · Wardog / Razgriz",
+  summary:"After the Belkan War, Osea and Yuktobania spent fifteen years as partners, building the Arkbird spaceplane and the Basset Space Center together. The Grey Men, a Belkan supremacist cabal of businessmen and politicians, set out to avenge 1995 by turning the two superpowers against each other. Yuktobania declared war on September 27, 2010. Wardog Squadron fought from Sand Island until it was branded a traitor, then returned unmarked as the Razgriz, exposed the plot, and stopped the Grey Men's satellite weapon. The war ended on December 30, 2010.",
+  cast:[["WARDOG","Blaze, Kei Nagase, Hans Grimm, Alvin H. 'Chopper' Davenport; later Marcus Snow as Razgriz"],["OSEA","President Vincent Harling, instructor Jack Bartlett"],["YUKTOBANIA","Prime Minister Seryozha Nikanor, Nastasya Obertas; submarines Scinfaxi and Hrimfaxi"],["GREY MEN","Belkan cabal incl. Gründer CEO Solare Ostberg; Ofnir and Grabacr squadrons posing as the '8492nd'"],["WEAPONS","Arkbird, SOLG orbital gun, V2"]],
+  beats:["Background: The Grey Men take control of sites on the Belka–Osea border, including Mount Schirm, Stier Castle and the munitions factory that became Gründer Industries.",
+   "Sep 23–27, 2010: Unknown fighters attack Wardog's training flight near Cape Landers. Kei Nagase and instructor Jack Bartlett survive. On Sep 27 Bartlett goes missing after shielding Nagase, and Yuktobania declares war.",
+   "Late September: Yuktobania hits the port of St. Hewlett and bombs Sand Island. On Sep 30 the submarine Scinfaxi's burst missiles sink the carriers Vulture and Buzzard in the Eaglin Straits.",
+   "Oct 3–4: Wardog guards a launch to the Arkbird and repels a landing on Sand Island. The Arkbird helps sink Scinfaxi.",
+   "Oct 22: Osean air defences fire on President Harling's plane at Akerson Hill and he disappears for two months. In Yuktobania, Nikanor is ousted in a coup.",
+   "Oct 31: Operation Footprint puts Osean troops ashore on the Bastok Peninsula.",
+   "Early November: The '8492nd Squadron' attacks a college in Dresdene. Yuktobanian special forces hit Apito airport and gas Bana City; Osea answers with secret strikes on Duga and Sonza.",
+   "Mid-November: Wardog sinks Hrimfaxi and earns the name 'Demons of Razgriz'. Osea pushes across the Jilachi Desert toward Cinigrad.",
+   "Nov 29: Yuktobanian aircraft attack a peace ceremony in November City. Chopper is killed.",
+   "Early December: After the breakthrough at Cruik Fortress, the 8492nd ambushes Wardog, Sand Island is tricked into treating them as traitors, and the pilots are listed as killed in action.",
+   "December: Flying as the Razgriz with Marcus Snow, the survivors rescue Harling from Stier Castle, seal the Mount Schirm mine, stop a stolen nuke, and shoot down the Arkbird after the Grey Men seize it. They help Bartlett, Nastasya Obertas and Nikanor escape.",
+   "Dec 29: Nikanor calls for peace. The Razgriz protect Yuktobanian ships that answer him and the Kestrel's fleet from attackers on both sides.",
+   "Dec 30: A decoded disc reveals the Grey Men's V2 plan. The Razgriz destroy the SOLG controls in Gründer's Sudentor tunnel, shoot down Ofnir and Grabacr, and destroy the SOLG as it falls toward Oured.",
+   "Aftermath: Harling and Nikanor make peace in Oured. Harling later promises to release the war's records in 2020; Free Erusea rises again in 2014."],
+  roles:{osea:"friendly",yuktobania:"hostile",belka:"hostile",erusea:"involved"},
+  events:{osea:"Wardog, flying from Sand Island, fights through the first months, sinks Hrimfaxi, and is then branded traitor and listed as dead. The survivors fight on as the Razgriz, rescue President Harling from Stier Castle and stop the SOLG from falling on the capital Oured. Harling and Nikanor make peace in Oured.",
+   yuktobania:"Declares war on September 27, 2010. Its burst-missile submarines Scinfaxi and Hrimfaxi wreck Osean fleets. Prime Minister Nikanor is ousted while hardliners fight on; freed with the Razgriz's help, he calls for peace on December 29 and settles it with Harling.",
+   belka:"The Grey Men, a Belkan supremacist cabal, start the war to avenge 1995. From the Belka–Osea border they run the '8492nd Squadron' (really Belka's Ofnir and Grabacr), stolen nuclear weapons and the SOLG. Their plan ends with the SOLG's destruction on December 30.",
+   erusea:"Not in the war. Free Erusea, thought defeated in 2006, uses the two superpowers' weakened militaries to rise again in 2014."},
+  arcs:[["yuktobania","osea"],["belka","osea"],["belka","yuktobania"]]},
+ {id:"ac6",code:"6",title:"Ace Combat 6: Fires of Liberation",year:2015,war:"Emmeria–Estovakia War",kind:"game",player:"Talisman · Garuda Team",
+  summary:"Ulysses hit Anea in 1999. Emmeria had built shelters and evacuated; Estovakia's Chandelier railgun wasn't finished in time and its economy collapsed. Emmeria helped rebuild its neighbour, but Estovakia fell into civil war, which the Eastern Faction won in October 2013 using cruiser technology from Belkan defectors to build an Aerial Fleet. Its military government, 'The Generals', fed on resentment of Emmeria and invaded on August 30, 2015. Garuda Team led Emmeria's fight back from Khesed Island to the liberation of Gracemeria. A ceasefire was signed in late May 2016.",
+  cast:[["GARUDA","Talisman; Shamrock (Marcus Lampert)"],["EMMERIA","AWACS Ghost Eye"],["STRIGON","Estovakia's elite air unit; captain Ilya Pasternak"],["ESTOVAKIA","The Generals; Gustav Dvornik"],["WEAPONS","Chandelier railgun, P-1112 Aigaion and its Nimbus missiles, the Aerial Fleet"]],
+  beats:["Aug 30, 2015: Estovakia declares war and attacks Gracemeria. Strigon Team and Nimbus missiles wipe out most of its defenders, and attempts to retake the capital fail.",
+   "Sep–Oct 2015: Emmeria loses San Loma to more Nimbus strikes from the Aigaion. Most of its military retreats to Khesed Island; civilians flee toward the Nordennavic border.",
+   "Nov 24–27, 2015: Emmeria repels bombers over Vitoze and Campagna Airport, then retakes Sipli Field.",
+   "Dec 27, 2015: Emmeria wins at Bartolomeo Fortress and Estovakia leaves Khesed Island.",
+   "Jan 26, 2016: Emmerian troops land on Rargom Beach on the mainland and retake Ortara.",
+   "Feb 2016: Battalions trapped near Silvat Town are relieved, the Selumna Peaks are crossed, and San Loma is retaken on February 15.",
+   "Feb 2016: Emmeria ambushes the Aerial Fleet refuelling over the Fuscum Sea. Talisman destroys the Aigaion, ending the Nimbus threat.",
+   "Mar 6, 2016: Special forces use tunnels to help capture Ragno Fortress in Grageo Canyon.",
+   "Mar 25, 2016: Emmeria overruns the Estovakian Army in the Moloch Desert, one of the war's largest battles, then pauses on learning of a plan to move weapons-of-mass-destruction catalysts into Gracemeria.",
+   "Late Mar 2016: Garuda Team destroys the catalyst convoy near the Alma River.",
+   "Mar 31, 2016: Operation Free Gracemeria liberates the capital. Talisman shoots down Ilya Pasternak. That night, officers opposed to the ceasefire fire the Chandelier at the celebrating city.",
+   "Apr 1, 2016: The Chandelier is found north of Sonne Island and destroyed. Gustav Dvornik and the last Strigon pilots are shot down. A coup in Estovakia topples The Generals.",
+   "Late May 2016: A ceasefire ends the war. Estovakia returns the Emmerian land it took."],
+  roles:{emmeria:"friendly",estovakia:"hostile",nordennavic:"involved",belka:"involved"},
+  events:{emmeria:"Prepared well for Ulysses and helped Estovakia rebuild, then is invaded on August 30, 2015 and loses Gracemeria and San Loma. Regrouping on Khesed Island, Garuda Team leads the counter-offensive back across Anea. Gracemeria is freed on March 31, 2016, and the Chandelier is destroyed the next day.",
+   estovakia:"Wrecked by Ulysses after its Chandelier railgun came too late. The Eastern Faction wins the civil war and its military government, The Generals, invades Emmeria. After defeat in the Moloch Desert and the loss of the Aigaion and Chandelier, a coup in its capital overthrows The Generals and it signs a ceasefire in May 2016, badly weakened.",
+   nordennavic:"Emmerian civilians flee toward its border after the fall of Gracemeria.",
+   belka:"Belkan defectors give Estovakia's Eastern Faction the cruiser technology behind its Aerial Fleet."},
+  arcs:[["estovakia","emmeria"]]},
+ {id:"civil19",code:"INC",title:"Leasath Civil War",year:2019,war:"Internal conflict",kind:"incident",
+  summary:"Leasath goes through a civil war one year before it invades Aurelia.",
+  roles:{leasath:"involved"},events:{leasath:"Internal war the year before the Aurelian War."},arcs:[]},
+ {id:"ac7",code:"7",title:"Ace Combat 7: Skies Unknown",year:2019,war:"Lighthouse War",kind:"game",player:"Trigger · Spare / Strider (LRSSG)",
+  summary:"Under former president Vincent Harling, Osea agreed with Usean nations to build the International Space Elevator, the 'Lighthouse', in the Gunther region, guarded by Osean and IUN forces and the Arsenal Bird flying warships. Radical young officers in Erusea convinced Princess Rosa Cossette D'Elise, and then the royal family, that Osea meant to dominate Usea. Erusea struck first with hidden drones on May 15, 2019. Osea won the war, but a satellite blackout and Erusea's collapse left Usea in chaos, and the final battle was fought by a joint Osean–Erusean force against Erusea's own runaway drone program.",
+  cast:[["OSEA","Trigger ('Three Strikes'), former president Vincent Harling"],["ERUSEA","Mihaly A. Shilage ('Mister X'), Princess Rosa Cossette D'Elise, Capt. Matias Torres (Alicorn)"],["EASA","Dr. Schroeder, who helps shut down the drone factories"],["MIMIC","Otto and Elke van Dalsen, assassins hired to kill Trigger"],["DRONES","Hugin and Munin, the ADF-11F Raven pair"]],
+  beats:["Before the war: Osea and Usean nations build the space elevator. Erusean Radicals turn the royal family against Osea.",
+   "May 15, 2019: Erusea declares war and seizes the Lighthouse. Drones hidden in shipping containers hit Osean ports at Aulick, St. Hewlett, Bana City and Oured, and Erusea takes control of the Arsenal Birds.",
+   "Late May: Osea strikes Farbanti from the carrier Kestrel II and retakes the Scofields Plateau airfield. A two-front offensive on May 30 fails; Erusea holds Farbanti and the Chopinburg Rainforest.",
+   "Mid-August: The penal Spare Squadron probes Erusea's radar net. The LRSSG wipes out the reserve fleet at Snider's Top, and Stonehenge shoots down the Arsenal Bird Liberty.",
+   "Sep 2: The LRSSG stops an Erusean missile launch from Sierraplata.",
+   "Sep 4: Osea tries to capture the submersible Alicorn at Artiglio Port. Captain Torres refuses to scuttle it, fires on the landing fleet and escapes.",
+   "Sep 10: Strider destroys the port and fleet at Anchorhead. Mimic Squadron's attempt to kill Trigger fails and both van Dalsen siblings die.",
+   "Sep 14: The Alicorn is sunk in the Spring Sea, ending its nuclear railgun threat.",
+   "Late September: Cape Rainy is captured, and Farbanti falls after a siege.",
+   "Late 2019: Anti-satellite strikes by both sides cause a worldwide communications blackout. Erusea's government collapses and breakaway regions such as Shilage declare independence.",
+   "Late October: Osean and Erusean forces, refugees, Princess Rosa and EASA staff destroy the Arsenal Bird Justice and the Ravens Hugin and Munin at the Lighthouse. The Radicals surrender.",
+   "Dec 1, 2019: A ceasefire from the Expo City Conference ends the war. The Lighthouse returns to IUN control and Rosa forms a provisional government there."],
+  roles:{osea:"friendly",erusea:"hostile",usea:"involved",fcu:"involved"},
+  events:{osea:"Hit by surprise drone strikes on its home ports. Trigger, accused of killing former president Harling, is sent to the penal Spare Squadron and later flies with Strider in the LRSSG. Osea takes Farbanti in September and wins the war, though its final battle is fought alongside Erusean forces.",
+   erusea:"Radical officers win over the royal family and start the war, seizing the Lighthouse and the Arsenal Birds and fielding drone fighters built with EASA and Gründer Industries. After Farbanti falls and the satellite blackout hits, the government collapses and regions like Shilage break away. Radicals keep building drones until a joint force that includes Princess Rosa stops them. Rosa then leads a provisional government based at the Lighthouse.",
+   usea:"The Lighthouse in the Gunther region is the prize of the war and the site of its last battle. The satellite blackout throws the continent into chaos, and fighting goes on in Erusea's breakaway regions after the ceasefire.",
+   fcu:"Listed among the war's belligerents. The wiki article doesn't detail its part."},
+  arcs:[["erusea","osea"],["erusea","usea"]]},
+ {id:"acx",code:"X",title:"Ace Combat X: Skies of Deception",year:2020,war:"Aurelian War",kind:"game",player:"Gryphus 1 · Gryphus Squadron",
+  summary:"Leasath invades Aurelia under General Diego Gaspar Navarro, using the airborne fortress Gleipnir. Gryphus Squadron leads Aurelia's liberation.",
+  roles:{aurelia:"friendly",leasath:"hostile"},
+  events:{aurelia:"Taken by surprise and pushed back to Santa Elva air base. Gryphus 1 leads the counter-offensive and Griswall is freed.",
+   leasath:"Navarro's government invades with the Gleipnir and Fenrir stealth fighters. Defeated by the end of the war."},
+  arcs:[["leasath","aurelia"]]},
+ {id:"xi",code:"Xi",title:"Ace Combat Xi: Skies of Incursion",year:2020,war:"Aurelian War",kind:"game",tag:"MOBILE",
+  summary:"A mobile game set in the same Aurelian War as Skies of Deception.",
+  roles:{aurelia:"friendly",leasath:"hostile"},
+  events:{aurelia:"The Aurelian War from another angle on mobile.",leasath:"Same invasion, same war."},
+  arcs:[["leasath","aurelia"]]},
+ {id:"ac8",code:"8",title:"Ace Combat 8: Wings of Theve",year:2029,war:"Sotoa–Usea War",kind:"game",tag:"NEW",player:"Wings of Theve · Joker Flight (carrier Endurance)",
+  summary:"Sotoa's rush to industrialize, meant to keep pace with Yuktobania, dried out its land and pushed its generals toward a long-planned invasion of Usea. The FCU was split between a rich west near the space elevator and a poorer east sunk in Sotoan-backed debt, and it was still rearming after IUN peacekeepers left. On July 16, 2029, Sotoa opened the war with a strike from its Tonitrus satellite on Expo City. Behind both sides stood Enso Order, a megacorporation that drew the war out for profit and whose PR arm created the 'Wings of Theve' legend. A treaty ended the fighting on August 3, 2030.",
+  cast:[["FCU","Jan 'Rex' Cope (original Wings of Theve), Lucas Díez Doniphan"],["SOTOA","Sabir Kurbanov and Carmille Tewy (Air Force Directors General), Lt. Gen. Daniil Kurbanov"],["LUX LUNAE","Girish Toprak, Ilhan Alem"],["ENSO ORDER","Megacorporation working both sides through Planning Division 303"],["OTHERS","Savia; Newfield Island and Southern Waiapolo separatists; Frente de Liberación partisans; Shilage Volunteer Corps"]],
+  beats:["2020–2027: Sotoa routes infrastructure money into eastern Usea and the Eusian Sea through Enso Order, building dependence. Rocky Island becomes a port and shipyard.",
+   "Feb 2028: A staged reactor accident on Rocky Island hides construction of the Tonitrus satellite and two land battleships.",
+   "Jan 2029: Tonitrus launches from Comona Base, presented to the public as a space telescope.",
+   "Jul 16, 2029: Tonitrus strikes Expo City. The land battleships reach the city the next day.",
+   "Oct 5, 2029: Theve falls to Sotoa.",
+   "Late Oct 2029: Lux Lunae's Girish Toprak kills Rex Cope. The FCU hides his death and his backseater becomes the new Wings of Theve.",
+   "Nov 2029: The FCU sinks Sotoa's Third and Fifth Fleets off Newfield Island. A first attempt to retake Theve fails.",
+   "Dec 24–26, 2029: Theve is retaken and the land battleship Xanthos is capsized in the city.",
+   "Jan 2030: Joker Flight stops parts for a third land battleship. A Tonitrus Spear strike kills about 4,000 civilians in Rio Bajo. Balios launches a second satellite before it is destroyed, and the space elevator is damaged.",
+   "Feb 2030: A shuttle from Comona Base cripples Tonitrus No. 2. Expo City is retaken. At Rocky Island, Tonitrus No. 1 is destroyed and both Kurbanov brothers are killed.",
+   "Mar–Apr 2030: A costly landing on Cima Island. Megafloat Fatsia falls on April 1, killing many Sotoan warlords. Sotoa's counter-attack on Cima fails and the war is effectively over.",
+   "Apr 2030: Enso starts destroying evidence. Carmille Tewy tries to expose Enso by aiming a Tonitrus Spear at Xanthos's reactors and is killed by Joker Flight. Enso sends the submersible Triumphant after Endurance to silence Doniphan.",
+   "Late Apr 2030: Doniphan broadcasts proof of Enso's guilt to over 90 million viewers, and 'Wings of Theve' becomes a name known worldwide.",
+   "Aug 2030: The FCU and Sotoa sign a treaty on August 3, refusing Enso's mediation. Enso dissolves on August 31 and its assets pass to General Resource."],
+  roles:{fcu:"friendly",sotoa:"hostile",usea:"involved",osea:"involved",yuktobania:"involved"},
+  events:{fcu:"Loses Expo City, then Theve on October 5, 2029. Flying from the carrier Endurance, Joker Flight and the new Wings of Theve help retake Theve on Christmas Eve, followed by Expo City, Rocky Island and Megafloat Fatsia. Newfield Island and Southern Waiapolo backed Sotoa until April 2030, and Savia switched to the FCU side. After the treaty, several former member states secede.",
+   sotoa:"Invades with the Tonitrus satellite and the land battleships Xanthos and Balios. Both battleships and both satellites are destroyed, its fleets and air force are broken, and the fall of Megafloat Fatsia kills many of its warlords. It signs a treaty on August 3, 2030.",
+   usea:"About one million people die. The space elevator is badly damaged, rebuilding is expected to run to around 2045, and Usea's refugee population grows several times over. The IUN is reformed as the Neo United Nations.",
+   osea:"Stays out of the fighting. Enso Order hoped to drag Osea in, and Osean public opinion was leaning toward intervention by February 2030.",
+   yuktobania:"Not a belligerent. Sotoa's industrial push, which set the war in motion, was aimed at keeping up with Yuktobania, and Enso hoped to provoke a Yuktobanian intervention."},
+  arcs:[["sotoa","fcu"],["sotoa","usea"]]},
+ {id:"ac3",code:"3",title:"Ace Combat 3: Electrosphere",year:2040,war:"Corporate War",kind:"game",player:"Nemo · UPEO SARF",
+  summary:"Megacorporations General Resource and Neucom have grown more powerful than nations. After the Faith Park Dispute, UPEO forces destroy a Neucom transport group; Neucom calls the UPEO a General Resource puppet and declares war. The player, Nemo, flies for UPEO's Special Armed Response Force (SARF). The war turns out to be engineered by Ouroboros, a revolutionary group that includes UPEO Supreme Commander Gilbert Park. Later lore frames the whole war as a simulation run inside the Nemo AI program by its creator, Simon Orestes Cohen.",
+  cast:[["SARF","Nemo, Rena Hirose, Erich Jaeger, Fiona Chris Fitzgerald"],["GENERAL RES.","Abyssal Dision (top ace, later defects), Keith Bryan"],["NEUCOM","Cynthia Bridgitte Fitzgerald, Fiona's sister"],["UPEO","Gilbert Park (Supreme Commander), Gabriel Clarkson (Representative)"],["OUROBOROS","Revolutionary group behind the war"]],
+  beats:["The Faith Park Dispute raises tensions; peace efforts by UPEO and the NUN fail.",
+   "SARF destroys a Neucom transport group and Neucom declares war on General Resource.",
+   "Neucom jams GR antennas in the Waipolo Mountains; its build-up at Megafloat is broken up.",
+   "GR destroys a Neucom ammunition plant and air base; Neucom shifts to high-altitude transports.",
+   "The fight reaches orbit over GR's Orbital Satellite Lasers. One is destroyed in space; another falls near Megafloat and Neucom recovers it.",
+   "Nanomachines run loose at Neucom's Chopinburg facility and SARF contains them.",
+   "GR sinks Neucom's submarine fleet. UPEO's Gabriel Clarkson is shot down, reportedly while defecting to Neucom.",
+   "SARF forces a chemical-weapons airship down at Axel Bay. GR raids Megafloat and heavily damages Port Edwards.",
+   "Park's link to Ouroboros comes out and SARF breaks from the UPEO to hunt him.",
+   "Megafloat is destroyed, Ouroboros's flagship falls, and its remaining forces are lost in the Geofront.",
+   "The last duel against Abyssal Dision moves into the Electrosphere, where he is deleted. The game has five endings; Dision dies in all of them.",
+   "Late 2040: eight XR-900 Geopelias attack Port Edwards and are destroyed by a hijacked GRDF fighter flown by an AI."],
+  roles:{usea:"involved"},events:{usea:"The only nation the war record names is Usea, which Neucom set out to shield from General Resource's orbital lasers. The fighting is otherwise told by place, not country: Megafloat, Port Edwards, Chopinburg, Axel Bay, the Comona Islands, the Waipolo Mountains and the Geofront."},arcs:[]}
+];
+
+const CONTINENTS = [
+ {name:"North Osea",at:[-85.3, -4.8],blobs:[[-101.6,-18.2,6.94],[-104.5,-9.6,5.95],[-96.8,-10.5,7.44],[-92.0,-24.0,7.44],[-93.9,-33.5,6.45],[-86.3,-37.4,6.45],[-78.6,-34.5,6.45],[-84.3,-27.8,8.43],[-76.7,-24.9,8.43],[-69.0,-27.8,7.44],[-67.1,-20.1,8.43],[-77.6,-14.4,8.93],[-86.3,-8.6,8.43],[-93.9,-3.8,5.46],[-76.7,-5.8,6.45],[-68.1,-8.6,7.44],[-60.4,-16.3,7.94],[-57.5,-23.0,6.45],[-51.8,-19.2,7.94],[-49.8,-11.5,7.94],[-57.5,-8.6,6.94],[-44.1,-21.1,6.45],[-39.3,-18.2,5.46],[-35.5,-16.3,2.73],[-45.0,-8.6,6.45],[-57.5,-2.9,4.46],[-51.8,-4.8,4.46],[-69.0,-2.9,3.47],[-84.3,-2.9,3.97],[-100.6,-3.8,3.47],[-107.4,-14.4,3.47],[-107.0,-6.7,4.96],[-109.3,-2.5,3.47],[-101.6,-37.4,3.97],[-96.8,-41.2,3.97]]},
+ {name:"Wellow",at:[-61.9, -58.5],blobs:[[-66.1,-50.8,5.95],[-59.4,-47.9,5.95],[-63.3,-43.1,5.46],[-69.0,-45.0,3.97],[-57.5,-54.6,3.47],[-72.5,-54.3,2.98],[-55.6,-41.2,3.47],[-62.9,-37.8,3.47],[-62.1,-35.1,2.23]]},
+ {name:"South Osea",at:[-76.7, 18.2],blobs:[[-63.6,9.0,4.46],[-68.1,11.5,4.96],[-72.5,14.4,4.96],[-76.7,17.8,4.96],[-80.5,21.1,4.96],[-84.3,24.0,4.96],[-88.2,27.4,4.96],[-92.0,30.7,4.46],[-95.9,33.2,3.97],[-98.7,35.1,2.98],[-74.4,20.5,2.98],[-61.3,12.5,2.48]]},
+ {name:"Usea",at:[-2.3, -4.8],blobs:[[-23.4,-15.3,4.96],[-23.4,-8.6,3.97],[-19.2,-18.2,5.95],[-18.2,-10.5,6.45],[-11.5,-14.4,6.45],[-11.5,-6.7,5.46],[-4.8,-17.3,5.95],[-3.8,-10.5,6.45],[2.9,-15.3,4.96],[3.8,-8.6,5.46],[9.6,-11.5,4.46],[12.5,-7.7,3.47],[0.0,-4.8,4.96],[-4.8,-2.9,4.46],[-2.9,1.9,3.97],[-1.0,6.3,3.22],[-7.7,0.0,2.98],[3.8,-23.0,3.47],[8.6,-20.1,2.98],[17.3,-8.6,2.48]]},
+ {name:"",at:[0, 0],blobs:[[15.0,-18.8,1.74],[30.7,12.5,2.48],[27.8,15.3,1.98],[0.0,17.6,2.23],[6.1,23.0,1.74],[5.8,12.5,1.49]]},
+ {name:"Anea",at:[71.9, -44.7],blobs:[[38.3,-51.8,2.48],[44.1,-45.0,3.97],[42.2,-38.3,2.98],[47.9,-35.5,3.47],[36.4,-41.2,1.98],[53.7,-46.0,4.96],[57.5,-39.3,6.45],[65.2,-44.1,5.95],[73.8,-46.0,5.46],[74.8,-38.3,6.94],[82.4,-43.1,6.45],[86.3,-36.4,5.95],[93.9,-42.2,6.45],[95.9,-35.5,5.46],[101.6,-39.3,4.46],[65.2,-33.9,2.98],[90.1,-32.4,2.23],[104.5,-32.6,2.48],[105.4,-47.9,2.48],[67.1,-49.3,3.97],[84.3,-49.7,3.97],[98.2,-47.7,3.97],[35.5,-48.5,2.23],[39.9,-33.2,2.23],[47.9,-29.3,1.74],[33.4,-39.3,1.74]]},
+ {name:"Verusa",at:[73.8, -4.4],blobs:[[46.0,-23.0,5.46],[53.7,-24.0,6.45],[63.3,-24.9,6.45],[72.8,-22.0,7.44],[82.4,-22.0,6.94],[92.0,-18.2,6.94],[99.7,-13.4,5.46],[103.5,-3.8,3.47],[49.8,-15.3,6.94],[61.3,-15.3,8.43],[72.8,-12.5,8.43],[84.3,-12.5,8.43],[94.9,-8.6,6.45],[53.7,-5.8,7.44],[65.2,-4.8,8.43],[76.7,-2.9,7.94],[88.2,-1.0,7.44],[95.9,4.8,5.95],[42.2,1.9,5.95],[40.3,7.7,4.46],[47.9,8.6,6.45],[57.5,4.8,6.94],[69.0,6.7,7.44],[80.5,8.6,6.94],[90.1,14.4,5.95],[86.3,20.1,4.96],[63.3,14.4,6.94],[72.8,16.3,6.45],[78.6,23.0,4.46],[57.5,21.1,6.45],[53.7,27.8,5.46],[49.8,32.6,3.97],[61.3,25.9,4.46],[76.7,26.3,5.46],[85.3,23.0,4.96],[69.0,30.7,4.46],[58.5,33.9,3.22],[101.2,-8.6,4.46],[102.4,-1.0,2.98],[92.0,19.2,3.97]]},
+ {name:"Antarctia",at:[-1.9, 60.4],blobs:[[-109.3,62.3,7.44],[-95.9,60.4,7.44],[-82.4,61.3,7.44],[-69.0,59.4,7.44],[-57.5,58.5,7.44],[-46.0,55.6,7.44],[-36.4,51.8,6.94],[-28.8,47.0,6.45],[-21.1,42.2,5.95],[-13.4,38.3,5.46],[-7.7,42.2,6.45],[0.0,48.9,8.43],[11.5,52.7,8.43],[23.0,56.6,8.93],[34.5,54.6,8.93],[46.0,52.7,8.43],[57.5,54.6,8.43],[69.0,51.8,8.43],[80.5,52.7,8.43],[92.0,51.8,8.43],[103.5,52.7,7.94],[112.1,54.6,6.45],[-24.9,56.6,9.92],[-7.7,58.5,10.91],[15.3,62.3,9.92],[49.8,62.3,9.92],[84.3,62.3,9.92],[107.4,62.3,7.44],[-51.8,63.3,7.44],[-76.7,64.6,6.45]]}
+];
+const CUTS = [[-103.1,-20.1,3.22],[-106.4,-24.9,1.98],[-80.5,-18.6,3.47],[-84.3,-18.2,1.98],[-70.5,-32.6,2.48],[-71.9,-2.9,2.48],[-7.7,-21.7,2.98],[76.7,-32.6,2.98],[69.0,-31.6,2.48],[47.0,-41.2,1.98],[51.8,-31.6,1.98],[58.5,0.0,2.48],[88.2,20.1,1.49],[-93.9,-18.2,2.48],[-60.4,3.8,3.47],[-30.1,-14.8,3.22],[-29.3,-8.6,2.98],[-30.7,-20.1,2.48],[50.8,-28.4,2.23],[62.3,-28.8,2.23],[73.8,-28.2,2.23],[85.3,-28.4,2.23],[96.8,-27.8,2.23],[103.5,-26.8,1.98]];
+const OCEANS = [{name:"Arctic Ocean",at:[-11.5, -60.4]},{name:"Ceres Ocean",at:[-106.4, -18.6]},{name:"Cascade Ocean",at:[-19.2, -25.5]},{name:"Spring Sea",at:[-24.9, 6.7]},{name:"Eusian Sea",at:[23.0, -12.5]},{name:"Aurum Sea",at:[26.8, -3.8]},{name:"Aurelia Ocean",at:[-76.7, 38.3]},{name:"Pacific Ocean",at:[105.4, 17.8]}];
+
+/* ---------- STATE ---------- */
+const LS="sr-theatre-logged";
+let logged=new Set();
+try{logged=new Set(JSON.parse(localStorage.getItem(LS)||"[]"))}catch(e){}
+function saveLogged(){try{localStorage.setItem(LS,JSON.stringify([...logged]))}catch(e){}}
+let selGame=null, selCountry=null;
+const gameById=Object.fromEntries(GAMES.map(g=>[g.id,g]));
+const roleWord={friendly:"Player side",hostile:"Hostile",involved:"Involved"};
+
+/* ---------- UI: missions ---------- */
+const ml=document.getElementById("missions");
+function renderMissions(){
+  ml.innerHTML="";
+  GAMES.forEach(g=>{
+    const li=document.createElement("li");
+    li.className="mission"+(g.kind==="incident"?" incident":"")+(selGame===g.id?" sel":"");
+    li.tabIndex=0;li.setAttribute("role","button");li.setAttribute("aria-pressed",selGame===g.id);
+    li.innerHTML=`<span class="yr">${g.year}</span><span class="t"><strong>${g.title}${g.tag?`<span class="tag">${g.tag}</span>`:""}</strong><small>${g.war}</small></span>`;
+    if(g.kind==="game"){
+      const b=document.createElement("button");b.type="button";b.className="logbtn";
+      b.setAttribute("aria-pressed",logged.has(g.id));b.textContent=logged.has(g.id)?"LOGGED":"LOG";
+      b.title="Mark as played";
+      b.onclick=e=>{e.stopPropagation();logged.has(g.id)?logged.delete(g.id):logged.add(g.id);saveLogged();renderMissions();updateReadouts();};
+      li.appendChild(b);
+    } else li.appendChild(document.createElement("span"));
+    li.onclick=()=>selectGame(selGame===g.id?null:g.id);
+    li.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();li.click()}};
+    ml.appendChild(li);
+  });
+}
+document.getElementById("allbtn").onclick=()=>{selectGame(null);selectCountry(null)};
+
+function updateReadouts(){
+  const g=selGame&&gameById[selGame];
+  document.getElementById("r-theatre").textContent=g?g.war.toUpperCase():"ALL";
+  document.getElementById("r-year").textContent=g?g.year:"1995–2040";
+  const total=GAMES.filter(x=>x.kind==="game").length;
+  document.getElementById("r-logged").textContent=`${logged.size}/${total}`;
+}
+
+/* ---------- UI: dossier ---------- */
+const dos=document.getElementById("dossier");
+function chip(id,role){const c=COUNTRIES[id];return `<button type="button" class="chip ${role||""}" data-c="${id}">${c.short}</button>`}
+function renderDossier(){
+  const H=document.getElementById("intel-h"),C=document.getElementById("intel-code");
+  if(selCountry){
+    const c=COUNTRIES[selCountry];
+    const list=GAMES.filter(g=>g.events[selCountry]);
+    H.textContent="Nation dossier";C.textContent=c.short;
+    dos.innerHTML=`${selGame?`<button type="button" class="back" id="back">◂ BACK TO BRIEFING</button>`:""}
+      <div><div class="eyebrow">${c.region?"Region":"Nation"} · ${c.cont}</div><h2>${c.name}</h2></div>
+      <dl class="facts"><dt>CAPITAL</dt><dd>${c.capital||"—"}</dd><dt>RECORDS</dt><dd>${list.length}</dd></dl>
+      <p>${c.about}</p>
+      <div class="entries">${list.length?list.map(g=>{const r=g.roles[selCountry]||"involved";return `<div class="entry ${r}"><h3><span class="y">${g.year}</span>${g.title}<span class="role ${r}">${roleWord[r]}</span></h3><p>${g.events[selCountry]}</p></div>`}).join(""):`<p class="empty">No recorded conflicts.</p>`}</div>`;
+    const b=document.getElementById("back");if(b)b.onclick=()=>selectCountry(null);
+  } else if(selGame){
+    const g=gameById[selGame];
+    H.textContent=g.kind==="incident"?"Incident report":"Mission briefing";C.textContent=g.code;
+    const ids=Object.keys(g.roles);
+    dos.innerHTML=`<div><div class="eyebrow">${g.year} · ${g.war}</div><h2>${g.title}</h2></div>
+      ${g.player||g.cast?`<dl class="facts">${g.player?`<dt>PLAYER</dt><dd>${g.player}</dd>`:""}${(g.cast||[]).map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`:""}
+      <p>${g.summary}</p>
+      ${g.beats?`<div><div class="eyebrow" style="margin-bottom:6px">Course of the war</div><ol class="beats">${g.beats.map(b=>`<li>${b}</li>`).join("")}</ol></div>`:""}
+      <div><div class="eyebrow" style="margin-bottom:6px">Nations involved · tap for record</div><div class="chips">${ids.map(i=>chip(i,g.roles[i])).join("")}</div></div>
+      <div class="entries">${ids.map(i=>{const r=g.roles[i];return `<div class="entry ${r}"><h3>${COUNTRIES[i].name}<span class="role ${r}">${roleWord[r]}</span></h3><p>${g.events[i]}</p></div>`}).join("")}</div>
+      ${g.tag==="NEW"?`<p class="note">Released October 2026. Contains full campaign spoilers. Also listed on the series timeline as the Third Continental War.</p>`:""}`;
+  } else {
+    H.textContent="Theatre overview";C.textContent="ALL";
+    const conts={};Object.entries(COUNTRIES).forEach(([id,c])=>{const k=c.cont.replace(/ \(.*\)/,"");(conts[k]=conts[k]||[]).push(id)});
+    dos.innerHTML=`<div><div class="eyebrow">Strangereal · ${GAMES.filter(g=>g.kind==="game").length} games · ${GAMES.filter(g=>g.kind==="incident").length} incidents</div><h2>Every war, every nation</h2></div>
+      <p>Pick an operation on the left to see who fought whom, or tap a marker on the map for that nation's full record across every game.</p>
+      ${Object.entries(conts).map(([k,ids])=>`<div><div class="eyebrow" style="margin-bottom:6px">${k}</div><div class="chips">${ids.map(i=>chip(i)).join("")}</div></div>`).join("")}
+      <p class="note">Laid out after the official world map from Ace Combat 8, drawn in a simplified tile style.</p>`;
+  }
+  dos.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>selectCountry(b.dataset.c));
+  dos.parentElement.scrollTop=0;
+}
+
+function selectGame(id){selGame=id;selCountry=null;renderMissions();renderDossier();updateReadouts();applyScene();
+  if(id){const ids=Object.keys(gameById[id].roles);const pts=ids.map(i=>COUNTRIES[i].pos);flyTo(pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length,ids.length>1?95:70)}
+  else flyTo(0,2,175);}
+function selectCountry(id){selCountry=id;renderDossier();applyScene();if(id){const p=COUNTRIES[id].pos;flyTo(p[0],p[1],70)}}
+
+/* ---------- 3D ---------- */
+const canvas=document.getElementById("gl"),wrap=document.getElementById("mapwrap"),labelsEl=document.getElementById("labels");
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();scene.fog=new THREE.Fog(0x03070e,160,340);
+const camera=new THREE.PerspectiveCamera(45,1,0.5,800);camera.position.set(0,150,110);
+const controls=new THREE.OrbitControls(camera,canvas);
+controls.enableDamping=true;controls.dampingFactor=.08;controls.maxPolarAngle=Math.PI*0.44;controls.minDistance=30;controls.maxDistance=260;controls.screenSpacePanning=false;
+
+scene.add(new THREE.AmbientLight(0x6688aa,.7));
+const dl=new THREE.DirectionalLight(0xcfe8ff,.8);dl.position.set(-60,120,40);scene.add(dl);
+
+// ocean + grid
+const ocean=new THREE.Mesh(new THREE.PlaneGeometry(240,170),new THREE.MeshBasicMaterial({color:0x050f1e}));
+ocean.rotation.x=-Math.PI/2;ocean.position.y=-.2;scene.add(ocean);
+const grid=new THREE.GridHelper(240,48,0x1c3c63,0x0e2240);grid.position.y=-.1;scene.add(grid);
+
+// procedural landmass (stylised)
+function noise(x,z){return Math.sin(x*.21+z*.07)*.5+Math.sin(z*.17-x*.11)*.5+Math.sin((x+z)*.33)*.25}
+function field(x,z){let v=0;CONTINENTS.forEach(c=>c.blobs.forEach(([bx,bz,r])=>{v+=Math.exp(-((x-bx)**2+(z-bz)**2)/(r*r))}));CUTS.forEach(([bx,bz,r])=>{v-=1.6*Math.exp(-((x-bx)**2+(z-bz)**2)/(r*r))});return v+noise(x,z)*.08}
+const STEP=1.35,cells=[];
+for(let x=-116;x<=116;x+=STEP)for(let z=-67;z<=68;z+=STEP*.866){
+  const ox=(Math.round(z/(STEP*.866))%2)?STEP/2:0;const v=field(x+ox,z);
+  if(v>.55)cells.push([x+ox,z,v]);
+}
+const hex=new THREE.CylinderGeometry(STEP*.56,STEP*.56,1,6);
+const landMat=new THREE.MeshLambertMaterial({color:0xffffff});
+const land=new THREE.InstancedMesh(hex,landMat,cells.length);
+const m4=new THREE.Matrix4(),col=new THREE.Color();
+cells.forEach(([x,z,v],i)=>{
+  const h=.4+Math.min(v-.55,1.4)*2.2;
+  m4.makeScale(1,h,1);m4.setPosition(x,h/2,z);land.setMatrixAt(i,m4);
+  const coast=v<.68;col.setHex(coast?0x2f6aa6:(v>1.3?0x1a4570:0x153a5e));land.setColorAt(i,col);
+});
+scene.add(land);
+
+// continent labels
+let clbls=CONTINENTS.filter(c=>c.name).map(c=>{const d=document.createElement("div");d.className="clbl";d.textContent=c.name;labelsEl.appendChild(d);return {el:d,v:new THREE.Vector3(c.at[0],3,c.at[1])}});
+
+OCEANS.forEach(o=>{const d=document.createElement("div");d.className="clbl olbl";d.textContent=o.name;labelsEl.appendChild(d);clbls.push({el:d,v:new THREE.Vector3(o.at[0],0.5,o.at[1])})});
+// markers
+const markers={},hitTargets=[];
+Object.entries(COUNTRIES).forEach(([id,c])=>{
+  const g=new THREE.Group();const [x,z]=c.pos;g.position.set(x,0,z);
+  const mat=new THREE.MeshBasicMaterial({color:0x9fe3ff,transparent:true,opacity:.9});
+  const beamMat=new THREE.MeshBasicMaterial({color:0x9fe3ff,transparent:true,opacity:.25,depthWrite:false});
+  const beam=new THREE.Mesh(new THREE.CylinderGeometry(.18,.18,9,8),beamMat);beam.position.y=4.5;
+  const gem=new THREE.Mesh(new THREE.OctahedronGeometry(c.minor?.7:(c.region?.9:1.2)),mat);if(c.minor){beam.scale.y=.6;beam.position.y=2.7;gem.position.y=6;}gem.position.y=9.6;
+  const ring=new THREE.Mesh(new THREE.RingGeometry(2,2.4,c.region?4:32),new THREE.MeshBasicMaterial({color:0x9fe3ff,transparent:true,opacity:.6,side:THREE.DoubleSide,depthWrite:false}));
+  ring.rotation.x=-Math.PI/2;ring.position.y=2.6;
+  const pulse=new THREE.Mesh(new THREE.RingGeometry(2.6,3,40),new THREE.MeshBasicMaterial({color:0x9fe3ff,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false}));
+  pulse.rotation.x=-Math.PI/2;pulse.position.y=2.7;
+  const hit=new THREE.Mesh(new THREE.SphereGeometry(4,8,8),new THREE.MeshBasicMaterial({visible:false}));hit.position.y=7;hit.userData.id=id;
+  g.add(beam,gem,ring,pulse,hit);scene.add(g);hitTargets.push(hit);
+  const el=document.createElement("div");el.className="lbl";el.textContent=c.short;el.onclick=()=>selectCountry(id);labelsEl.appendChild(el);
+  markers[id]={g,mat,beamMat,ring,pulse,gem,el,v:new THREE.Vector3(x,c.minor?8:12,z),state:"none",minor:!!c.minor};
+});
+
+// arcs
+const arcGroup=new THREE.Group();scene.add(arcGroup);let arcs=[];
+function makeArc(a,b,color){
+  const A=new THREE.Vector3(a[0],9,a[1]),B=new THREE.Vector3(b[0],9,b[1]);
+  const mid=A.clone().lerp(B,.5);mid.y+=A.distanceTo(B)*.35+8;
+  const curve=new THREE.QuadraticBezierCurve3(A,mid,B);
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(60)),new THREE.LineBasicMaterial({color,transparent:true,opacity:.45}));
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.7,10,10),new THREE.MeshBasicMaterial({color}));
+  arcGroup.add(line,head);return {curve,head,t:Math.random()};
+}
+
+const COL={friendly:0x3f7dff,hostile:0xff4f4f,involved:0xf5c04a,none:0x9fe3ff};
+function applyScene(){
+  const g=selGame&&gameById[selGame];
+  Object.entries(markers).forEach(([id,m])=>{
+    const r=g?(g.roles[id]||"dim"):"none";m.state=r;
+    const c=COL[r]||0x3d5f82;
+    m.mat.color.setHex(c);m.beamMat.color.setHex(c);m.ring.material.color.setHex(c);m.pulse.material.color.setHex(c);
+    m.mat.opacity=r==="dim"?.25:.95;m.beamMat.opacity=r==="dim"?.06:.3;m.ring.material.opacity=r==="dim"?.15:.6;
+    m.el.className="lbl"+(r==="dim"||(r==="none"&&m.minor)?" dim":"")+(COL[r]&&r!=="none"?" "+r:"")+(selCountry===id?" sel":"");
+  });
+  arcGroup.clear();arcs=[];
+  if(g)g.arcs.forEach(([a,b])=>arcs.push(makeArc(COUNTRIES[a].pos,COUNTRIES[b].pos,0xff4f4f)));
+}
+
+// camera flight
+const target=new THREE.Vector3(0,0,4);let fly=null;
+function flyTo(x,z,dist){
+  const dir=camera.position.clone().sub(controls.target).normalize();
+  fly={t0:performance.now(),from:controls.target.clone(),to:new THREE.Vector3(x,0,z),camFrom:camera.position.clone(),camTo:new THREE.Vector3(x,0,z).add(dir.multiplyScalar(dist))};
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches)fly.t0=-1e9;
+}
+
+// picking
+const ray=new THREE.Raycaster(),ptr=new THREE.Vector2();let down=null;
+canvas.addEventListener("pointerdown",e=>{down=[e.clientX,e.clientY]});
+canvas.addEventListener("pointerup",e=>{
+  if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
+  const r=canvas.getBoundingClientRect();ptr.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
+  ray.setFromCamera(ptr,camera);const hit=ray.intersectObjects(hitTargets)[0];if(hit)selectCountry(hit.object.userData.id);
+});
+
+function resize(){const w=wrap.clientWidth,h=wrap.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(wrap);resize();
+
+const tmp=new THREE.Vector3();
+function project(v,el){
+  tmp.copy(v).project(camera);
+  if(tmp.z>1){el.style.display="none";return}
+  el.style.display="";el.style.left=((tmp.x+1)/2*wrap.clientWidth)+"px";el.style.top=((1-tmp.y)/2*wrap.clientHeight)+"px";
+}
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+function loop(now){
+  if(fly){const k=Math.min(1,(now-fly.t0)/900),e=1-Math.pow(1-k,3);
+    controls.target.lerpVectors(fly.from,fly.to,e);camera.position.lerpVectors(fly.camFrom,fly.camTo,e);if(k>=1)fly=null;}
+  controls.update();
+  const t=now/1000;
+  Object.entries(markers).forEach(([id,m])=>{
+    m.gem.rotation.y=reduce?0:t*1.2;
+    const active=(m.state!=="dim"&&m.state!=="none")||selCountry===id;
+    if(active&&!reduce){const p=(t*.8+id.length*.13)%1;m.pulse.scale.setScalar(1+p*2.2);m.pulse.material.opacity=(1-p)*.7}else m.pulse.material.opacity=0;
+    project(m.v,m.el);
+  });
+  clbls.forEach(c=>project(c.v,c.el));
+  arcs.forEach(a=>{a.t=(a.t+(reduce?0:.006))%1;a.head.position.copy(a.curve.getPoint(a.t))});
+  renderer.render(scene,camera);requestAnimationFrame(loop);
+}
+camera.position.set(0,150,105);camera.lookAt(0,0,2);controls.target.set(0,0,2);
+
+renderMissions();renderDossier();updateReadouts();applyScene();requestAnimationFrame(loop);
+</script>
+<script>
+(function(){
+const DATA=[{"maker": "Boeing", "families": [{"name": "F-4 Phantom II", "orig": "McDonnell Douglas", "rows": [{"n": "F-4E", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AHL": "b", "AC7": "d", "AC8": "b"}, "note": null}, {"n": "F-4G", "g": {"AC5": "b"}, "note": null}, {"n": "F-4X", "g": {"AC5": "b"}, "note": null}]}, {"name": "F-15 Eagle", "orig": "McDonnell Douglas", "rows": [{"n": "F-15C", "g": {"AC1": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "F-15J", "g": {"AC7": "b", "AC8": "b"}, "note": null}, {"n": "F-15E", "g": {"AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AC6": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "F-15S", "g": {"AC2": "b"}, "note": null}, {"n": "F-15 S/MTD", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "AHL": "b", "AC7": "d"}, "note": null}, {"n": "F-15 ACTIVE", "g": {"AC04": "b"}, "note": null}, {"n": "F-15SE Silent Eagle", "g": {"AHL": "b"}, "note": null}, {"n": "F-15S/MT Eagle+", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "F/A-18 Hornet & Super Hornet", "orig": "McDonnell Douglas", "rows": [{"n": "F/A-18C", "g": {"AC1": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "AC8": "b"}, "note": null}, {"n": "F/A-18E", "g": {"AC2": "b", "AC5": "b", "ACX": "b", "AHL": "b", "AC7": "d", "AC8": "b"}, "note": null}, {"n": "F/A-18F", "g": {"AC6": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "F/A-18F Block III", "g": {"AC7": "d"}, "note": null}, {"n": "EA-18G Growler", "g": {"AC5": "b", "ACZ": "b", "AC8": "b"}, "note": null}, {"n": "F/A-18I Hornet ADV", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "A-4 Skyhawk", "orig": "McDonnell Douglas", "rows": [{"n": "A-4", "g": {"AC2": "b"}, "note": null}]}, {"name": "X-32", "orig": null, "rows": [{"n": "F/A-32C Erne", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}]}, {"maker": "Lockheed Martin", "families": [{"name": "F-16 Fighting Falcon", "orig": "General Dynamics", "rows": [{"n": "F-16C", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "F-16C Block 60", "g": {"AC5": "b"}, "note": null}, {"n": "F-16XL", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "AC7": "d"}, "note": null}, {"n": "F-16XF Gyrfalcon", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}, {"n": "F-16XA Sakerfalcon", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "F-22 Raptor", "orig": null, "rows": [{"n": "YF-22", "g": {"AC2": "b"}, "note": null}, {"n": "F-22A", "g": {"AC1": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "FB-22", "g": {"AC5": "b", "ACX": "b", "AC7": "d"}, "note": "Concept bomber"}, {"n": "F-22C Raptor II", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "F-35 Lightning II", "orig": null, "rows": [{"n": "F-35B", "g": {"AHL": "b"}, "note": null}, {"n": "F-35C", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC7": "b", "AC8": "b"}, "note": null}]}, {"name": "F-117 Nighthawk", "orig": "Lockheed", "rows": [{"n": "F-117A", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b"}, "note": null}, {"n": "A/F-117X NAV Hawk", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "F-104 Starfighter", "orig": "Lockheed", "rows": [{"n": "F-104C", "g": {"AC7": "b"}, "note": "AC7 also adds an -AV- DLC version"}]}, {"name": "A-12 / SR-71 Blackbird", "orig": "Lockheed", "rows": [{"n": "RF-12A2 Blackbird", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}]}, {"maker": "Northrop Grumman", "families": [{"name": "F-14 Tomcat", "orig": "Grumman", "rows": [{"n": "F-14A", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "AC7": "d", "AC8": "d"}, "note": null}, {"n": "F-14B", "g": {"AC5": "b"}, "note": null}, {"n": "F-14D", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}]}, {"name": "A-6 Intruder & EA-6B Prowler", "orig": "Grumman", "rows": [{"n": "A-6E", "g": {"AC2": "b", "AC5": "b", "ACX": "b", "AC8": "b"}, "note": null}, {"n": "EA-6B Prowler", "g": {"AC5": "b", "ACZ": "b", "AC8": "b"}, "note": null}]}, {"name": "X-29", "orig": "Grumman", "rows": [{"n": "X-29A", "g": {"AC2": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AHL": "b"}, "note": null}]}, {"name": "F6F Hellcat", "orig": "Grumman", "rows": [{"n": "F6F-5 Hellcat", "g": {"AHL": "b"}, "note": null}]}, {"name": "F-5 Tiger II & F-20 Tigershark", "orig": "Northrop", "rows": [{"n": "F-5E", "g": {"AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b"}, "note": null}, {"n": "F-20A", "g": {"AC5": "b", "ACZ": "b"}, "note": null}]}, {"name": "YF-23 Black Widow II", "orig": "Northrop", "rows": [{"n": "YF-23A", "g": {"AC1": "b", "AC2": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AHL": "b", "AC7": "b"}, "note": null}]}]}, {"maker": "Fairchild Republic", "families": [{"name": "A-10 Thunderbolt II", "orig": null, "rows": [{"n": "A-10A", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "AC6": "b", "AHL": "b"}, "note": null}, {"n": "YA-10B", "g": {"AC5": "b"}, "note": null}, {"n": "A-10C", "g": {"AC7": "b", "AC8": "b"}, "note": null}]}]}, {"maker": "Sukhoi", "families": [{"name": "Su-25 Frogfoot", "orig": null, "rows": [{"n": "Su-25", "g": {"AC2": "b", "AHL": "b"}, "note": null}, {"n": "Su-25SM", "g": {"AC8": "b"}, "note": null}]}, {"name": "Su-27 Flanker family", "orig": null, "rows": [{"n": "Su-27", "g": {"AC1": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b"}, "note": null}, {"n": "Su-30M2", "g": {"AC7": "b"}, "note": null}, {"n": "Su-30SM", "g": {"AC7": "b"}, "note": null}, {"n": "Su-33", "g": {"AC6": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "Su-35", "g": {"AC2": "b", "AC04": "b", "AC5": "b"}, "note": null}, {"n": "Su-35S", "g": {"AC7": "b", "AC8": "b"}, "note": null}, {"n": "Su-37", "g": {"AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AHL": "b", "AC7": "b"}, "note": null}, {"n": "Su-37 Super Flanker", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "Su-34 Fullback", "orig": null, "rows": [{"n": "Su-32", "g": {"AC5": "b", "ACZ": "b"}, "note": "Export name of the Su-34"}, {"n": "Su-34", "g": {"AC7": "b", "AC8": "b"}, "note": null}]}, {"name": "Su-47 Berkut", "orig": null, "rows": [{"n": "S-32", "g": {"AC5": "b", "ACX": "b", "ACXi": "b"}, "note": "Earlier Berkut designation"}, {"n": "S-37A", "g": {"AC04": "b"}, "note": "Su-47's original designation"}, {"n": "Su-47", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "Su-43 Berkut", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "Su-57", "orig": null, "rows": [{"n": "PAK FA", "g": {"AHL": "b"}, "note": "Su-57 prototype name"}, {"n": "Su-57", "g": {"AC7": "b", "AC8": "b"}, "note": null}]}]}, {"maker": "Mikoyan", "families": [{"name": "MiG-21 Fishbed", "orig": null, "rows": [{"n": "MiG-21bis", "g": {"AC2": "b", "AC5": "b", "ACZ": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "MiG-21-93", "g": {"AC5": "b", "ACX": "b", "ACXi": "b", "AHL": "b"}, "note": null}]}, {"name": "MiG-29 Fulcrum & MiG-35", "orig": null, "rows": [{"n": "MiG-29A", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "MiG-35D", "g": {"AC7": "d"}, "note": null}, {"n": "MiG-33 Fulcrum SS", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}, {"name": "MiG-31 Foxhound", "orig": null, "rows": [{"n": "MiG-31", "g": {"AC1": "b", "AC2": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AHL": "b"}, "note": null}, {"n": "MiG-31B", "g": {"AC7": "b", "AC8": "b"}, "note": null}, {"n": "MiG-31M", "g": {"AC5": "b"}, "note": null}]}, {"name": "MiG-1.44", "orig": null, "rows": [{"n": "MiG-1.44", "g": {"AC5": "b", "ACX": "b", "AHL": "b"}, "note": null}]}]}, {"maker": "Dassault", "families": [{"name": "Mirage 2000", "orig": null, "rows": [{"n": "Mirage 2000", "g": {"AC04": "b", "AC5": "b"}, "note": null}, {"n": "Mirage 2000-5", "g": {"AC6": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "Mirage 2000D", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "AHL": "b"}, "note": null}]}, {"name": "Rafale", "orig": null, "rows": [{"n": "Rafale C", "g": {"AC1": "b"}, "note": null}, {"n": "Rafale M", "g": {"AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "Rafale B", "g": {"AC5": "b"}, "note": null}]}]}, {"maker": "Saab", "families": [{"name": "35 Draken", "orig": null, "rows": [{"n": "J35J", "g": {"AC2": "b", "ACZ": "b"}, "note": null}]}, {"name": "37 Viggen", "orig": null, "rows": [{"n": "JA 37", "g": {"ACX": "b"}, "note": null}]}, {"name": "39 Gripen", "orig": null, "rows": [{"n": "Gripen C", "g": {"AC1": "b", "AC2": "b", "AC5": "b", "ACZ": "b", "ACX": "b"}, "note": null}, {"n": "Gripen NG", "g": {"AHL": "b"}, "note": null}, {"n": "Gripen E", "g": {"AC7": "b", "AC8": "b"}, "note": null}]}]}, {"maker": "Eurofighter", "families": [{"name": "Typhoon", "orig": null, "rows": [{"n": "Typhoon", "g": {"AC1": "b", "AC2": "b", "AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "EF2000E Typhoon II", "g": {"AC3": "b"}, "note": "2040 derivative (AC3)"}]}]}, {"maker": "Panavia", "families": [{"name": "Tornado", "orig": null, "rows": [{"n": "Tornado F.2", "g": {"AC1": "b"}, "note": null}, {"n": "Tornado F.3", "g": {"AC2": "b", "AC5": "b", "ACX": "b"}, "note": null}, {"n": "Tornado IDS", "g": {"AC04": "b"}, "note": null}, {"n": "Tornado GR.1", "g": {"AC5": "b"}, "note": null}, {"n": "Tornado GR.4", "g": {"AC5": "b", "ACZ": "b", "AC6": "b"}, "note": null}, {"n": "Tornado ECR", "g": {"AC5": "b"}, "note": null}]}]}, {"maker": "Mitsubishi", "families": [{"name": "F-1", "orig": null, "rows": [{"n": "F-1", "g": {"ACZ": "b", "ACX": "b", "ACXi": "b"}, "note": null}]}, {"name": "F-2", "orig": null, "rows": [{"n": "F-2A", "g": {"AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AC6": "b", "AHL": "b", "AC7": "b", "AC8": "b"}, "note": null}, {"n": "F-2A Super Kai", "g": {"AC7": "d"}, "note": "AC7 lists it as F-2A SK"}]}, {"name": "A6M Zero", "orig": null, "rows": [{"n": "A6M5 Zero", "g": {"AHL": "b"}, "note": null}]}]}, {"maker": "BAE Systems", "families": [{"name": "Hawk", "orig": "Hawker Siddeley", "rows": [{"n": "Hawk", "g": {"AC5": "b"}, "note": null}]}]}, {"maker": "IAI", "families": [{"name": "Kfir", "orig": null, "rows": [{"n": "Kfir C7", "g": {"AC2": "b"}, "note": null}]}]}, {"maker": "Strangereal originals", "families": [{"name": "X-02 Wyvern", "orig": null, "rows": [{"n": "X-02", "g": {"AC04": "b", "AC5": "b", "ACZ": "b", "ACX": "b"}, "note": null}, {"n": "X-02S", "g": {"AC7": "b"}, "note": null}]}, {"name": "ADF / ADFX line", "orig": null, "rows": [{"n": "ADFX-01 Morgan", "g": {"ACZ": "b", "AC7": "d"}, "note": null}, {"n": "ADFX-02 Morgan", "g": {"AC8": "d"}, "note": null}, {"n": "ADF-01 FALKEN", "g": {"AC5": "b", "ACZ": "b", "ACX": "b", "ACXi": "b", "AHL": "b", "AC7": "d"}, "note": null}, {"n": "ADF-11F Raven", "g": {"AC7": "d"}, "note": null}]}, {"name": "ACX & Xi prototypes", "orig": null, "rows": [{"n": "XFA-24A Apalis", "g": {"ACX": "b", "ACXi": "b"}, "note": null}, {"n": "XFA-27", "g": {"AC2": "b", "ACX": "b", "ACXi": "b", "AHL": "b", "AC7": "d"}, "note": null}, {"n": "YR-302 Fregata", "g": {"ACX": "b", "ACXi": "b"}, "note": null}, {"n": "XR-45 Cariburn", "g": {"ACX": "b", "ACXi": "b"}, "note": null}, {"n": "YR-99 Forneus", "g": {"ACX": "b"}, "note": null}, {"n": "Fenrir", "g": {"ACX": "b"}, "note": null}]}, {"name": "Later Strangereal designs", "orig": null, "rows": [{"n": "CFA-44 Nosferatu", "g": {"AC6": "b", "AC7": "d"}, "note": null}, {"n": "ASF-X Shinden II", "g": {"AC7": "d"}, "note": null}, {"n": "X-40 Nightmare", "g": {"AC8": "b"}, "note": null}, {"n": "EA-36 Barricader", "g": {"AC8": "b"}, "note": null}]}, {"name": "'Game' line", "orig": null, "rows": [{"n": "XFA-36A Game", "g": {"AC3": "b"}, "note": "Shares its name with AC8's FA-36"}, {"n": "FA-36 Game", "g": {"AC8": "b"}, "note": "Shares its name with AC3's XFA-36A"}]}, {"name": "Neucom (AC3)", "orig": null, "rows": [{"n": "R-101 Delphinus #1", "g": {"AC3": "b"}, "note": null}, {"n": "R-102 Delphinus #2", "g": {"AC3": "b"}, "note": null}, {"n": "R-103 Delphinus #3", "g": {"AC3": "b"}, "note": null}, {"n": "R-201 Asterozoa", "g": {"AC3": "b"}, "note": null}, {"n": "R-211 Orcinus", "g": {"AC3": "b"}, "note": null}, {"n": "R-311 Remora", "g": {"AC3": "b"}, "note": null}, {"n": "R-352 Sepia", "g": {"AC3": "b"}, "note": null}, {"n": "XR-900 Geopelia", "g": {"AC3": "b"}, "note": null}]}, {"name": "Ouroboros (AC3)", "orig": null, "rows": [{"n": "X-49 Night Raven", "g": {"AC3": "b"}, "note": null}, {"n": "UI-4054 Aurora", "g": {"AC3": "b"}, "note": null}]}, {"name": "Nordennavic (Northern Wings)", "orig": null, "rows": [{"n": "Vargr P-26", "g": {"NW": "b"}, "note": "Resembles Gripen C / F-16C"}, {"n": "Vargr P-28", "g": {"NW": "b"}, "note": "Resembles F-14A"}, {"n": "Vargr P-46", "g": {"NW": "b"}, "note": "Resembles Su-47"}, {"n": "Mjollnir R-20", "g": {"NW": "b"}, "note": "Resembles A-10A"}, {"n": "Mjollnir R-30", "g": {"NW": "b"}, "note": "Resembles Su-34"}, {"n": "Mjollnir R-40", "g": {"NW": "b"}, "note": "Resembles Chengdu J-20"}, {"n": "Arvakr V-50", "g": {"NW": "b"}, "note": "Resembles F-22A / YF-23"}, {"n": "Arvakr V-55", "g": {"NW": "b"}, "note": "Resembles F-35B"}, {"n": "Arkbird I", "g": {"NW": "b"}, "note": "Osean–Yuktobanian spaceplane"}]}, {"name": "Film aircraft (Top Gun: Maverick DLC)", "orig": null, "rows": [{"n": "DarkStar", "g": {"AC7": "d"}, "note": null}, {"n": "5th Gen Fighter", "g": {"AC7": "d"}, "note": null}]}]}];
+const GAMES=[["AC1","Air Combat",1995],["AC2","Ace Combat 2",1997],["AC3","Electrosphere",1999],["AC04","Shattered Skies",2001],["AC5","The Unsung War",2004],["ACZ","The Belkan War",2006],["ACX","Skies of Deception",2006],["AC6","Fires of Liberation",2007],["ACXi","Skies of Incursion",2009],["AHL","Assault Horizon Legacy",2011],["NW","Northern Wings",2011],["AC7","Skies Unknown",2019],["AC8","Wings of Theve",2026]];
+const LBL={AC1:"AC",AC2:"2",AC3:"3",AC04:"04",AC5:"5",ACZ:"ZERO",ACX:"X",AC6:"6",ACXi:"Xi",AHL:"AHL",NW:"NW",AC7:"7",AC8:"8"};
+let fGame=null,fq="";
+try{fGame=localStorage.getItem("hangar-game")||null}catch(e){}
+const t=document.getElementById("t"),q=document.getElementById("q");
+const all=DATA.flatMap(m=>m.families.flatMap(f=>f.rows));
+const perGame=Object.fromEntries(GAMES.map(([c])=>[c,all.filter(r=>r.g[c]).length]));
+document.getElementById("stats").innerHTML=`<div>AIRCRAFT <b>${all.length}</b></div><div>MAKERS <b>${DATA.length-1}</b> + ORIGINALS</div><div>MOST SHARED <b>${[...all].sort((a,b)=>Object.keys(b.g).length-Object.keys(a.g).length)[0].n}</b></div>`;
+document.getElementById("makers").innerHTML=DATA.map((m,i)=>`<a class="chip" href="#mk${i}">${m.maker}</a>`).join("");
+function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function render(){
+  const ql=fq.toLowerCase();let shown=0;
+  let h=`<thead><tr><th class="namecol">MAKER / FAMILY / VARIANT</th>${GAMES.map(([c,n,y])=>`<th class="gh${fGame===c?" on":""}" data-g="${c}" title="${n} (${y})" scope="col" tabindex="0" aria-pressed="${fGame===c}"><b>${LBL[c]}</b><small>${y}</small><i>${perGame[c]}</i></th>`).join("")}<th class="cnt">GAMES</th></tr></thead><tbody>`;
+  DATA.forEach((m,mi)=>{
+    const isO=m.maker==="Strangereal originals";let mh="";
+    m.families.forEach(f=>{
+      const rows=f.rows.filter(r=>(!fGame||r.g[fGame])&&(!ql||r.n.toLowerCase().includes(ql)||f.name.toLowerCase().includes(ql)||m.maker.toLowerCase().includes(ql)||(f.orig||"").toLowerCase().includes(ql)));
+      if(!rows.length)return;
+      mh+=`<tr class="fam"><td class="namecol"><span class="fm">${esc(f.name)}${f.orig?`<small>orig. ${esc(f.orig)}</small>`:""}</span></td>${GAMES.map(()=>"<td></td>").join("")}<td></td></tr>`;
+      rows.forEach((r,i)=>{shown++;
+        mh+=`<tr class="v${isO?" orig":""}${i===rows.length-1?" last":""}"><td class="namecol"><span class="vn">${esc(r.n)}</span>${r.note?`<span class="vnote">${esc(r.note)}</span>`:""}</td>${GAMES.map(([c])=>`<td class="c${fGame===c?" on":""}">${r.g[c]?`<i class="dot${r.g[c]==="d"?" d":""}" title="${LBL[c]}${r.g[c]==="d"?" (DLC)":""}"></i>`:""}</td>`).join("")}<td class="cnt">${Object.keys(r.g).length}</td></tr>`;
+      });
+    });
+    if(mh)h+=`<tr class="maker${isO?" originals":""}" id="mk${mi}"><td class="namecol"><span class="mk">${esc(m.maker)}<small>${m.families.reduce((a,f)=>a+f.rows.length,0)} aircraft</small></span></td>${GAMES.map(()=>"<td></td>").join("")}<td></td></tr>`+mh;
+  });
+  h+="</tbody>";
+  t.innerHTML=h+(shown?"":`<tbody><tr><td class="empty" colspan="${GAMES.length+2}">No aircraft match "${esc(fq)}".</td></tr></tbody>`);
+  const g=GAMES.find(x=>x[0]===fGame);
+  document.getElementById("status").textContent=g?`Showing ${g[1]} only: ${shown} aircraft. Tap the column again to clear.`:(fq?`${shown} matches`:"");
+  t.querySelectorAll(".gh").forEach(th=>{const go=()=>{fGame=fGame===th.dataset.g?null:th.dataset.g;try{fGame?localStorage.setItem("hangar-game",fGame):localStorage.removeItem("hangar-game")}catch(e){};render()};th.onclick=go;th.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}}});
+}
+q.addEventListener("input",()=>{fq=q.value.trim();render()});
+window.hangarRender=render;render();
+})();
+</script>
+
+<script>
+(function(){
+const STATIC=[["Before the wars", "65 mya", "Dinosaurs go extinct, likely after an asteroid impact.", "n"], ["Before the wars", "Pre-1900", "The Belkan Knights rise on the northern Osean continent; the future Sotoa begins as a confederation of nomadic tribes.", "n"], ["Before the wars", "1100s", "Construction begins on Stier Castle.", "n"], ["Before the wars", "1400s", "King Aurelius II restores order in Emmeria; it later becomes a republic with its capital at Gracemeria.", "n"], ["Before the wars", "1500s", "Osean Admiral Stafford creates the 3rd Osean Naval Fleet.", "n"], ["Before the wars", "1905", "Belka creates the Belkan Air Force, the first to use aircraft as weapons of war. The Osean War begins; Belka uses its air force for bombing raids.", "m"], ["Before the wars", "1910", "The Osean War ends.", "m"], ["Before the wars", "1940s", "Jonas Starke becomes a top ace of the Belkan Air Force.", "n"], ["Cold War and the Belkan decline · 1970–1994", "1970s", "Pro-democracy riots in eastern Belka escalate into the Rectan Conflict. The FCU Endurance is decommissioned and becomes a museum ship in Theve.", "m"], ["Cold War and the Belkan decline · 1970–1994", "1973", "Silber Team forms and ends the Rectan Conflict in a Belkan victory.", "m"], ["Cold War and the Belkan decline · 1970–1994", "1980s", "The Osea–Yuktobania Cold War becomes an arms race. Yuktobania proposes the Arsenal Ship (Scinfaxi-class); Osea proposes the orbiting Arkbird under its Strategic Defense Initiative.", "m"], ["Cold War and the Belkan decline · 1970–1994", "1981", "Belka begins drafting a ballistic missile defence programme that later becomes Excalibur.", "m"], ["Cold War and the Belkan decline · 1970–1994", "1985", "The Wellow Incident: Silber Team shoots down unidentified aircraft near Crescens Island. Project Pendragon (V2) begins in Belka. ADFX-01 Morgan development begins (Jan 4).", "m"], ["Cold War and the Belkan decline · 1970–1994", "1986", "The Tyumen Dispute between Kaluga and Yuktobania; Zubov's unit wins the Battle of Zhytomyr.", "m"], ["Cold War and the Belkan decline · 1970–1994", "1987", "The Kholm regime stages a coup in Romny; Zubov helps suppress it. X-02A blueprints are completed (Jan 22). Belka enters recession and a Federal Law Review lets eastern territories secede (Dec 17).", "m"], ["Cold War and the Belkan decline · 1970–1994", "1988", "Northeastern Belkan territories declare independence, later Gebet (Feb 8). Southeastern territories secede as the Republic of Ustio (May 12); Osea is revealed to have secretly funded the movement.", "w"], ["Cold War and the Belkan decline · 1970–1994", "1990", "Clashes in Tauberg over Excalibur's construction (May 15). Osean Wizard Squadron created (Jun 23). Excalibur protection facilities begin construction and Osea announces its Rearmament Declaration (Oct 8).", "m"], ["Cold War and the Belkan decline · 1970–1994", "1991", "Belka sells territories to Fato, neighbours and Osea (Aug 29); anti-Osean sentiment grows. Yuktobania announces the Scinfaxi-class submarines (Sep 2). The Liberal Democratic Party gains a majority and Belka dismantles its separation of powers. Borders are redrawn (Dec 16).", "m"], ["Cold War and the Belkan decline · 1970–1994", "1994", "Seals Bridge University discovers asteroid 1994XF04 (Oct 4); the IAU flags a close pass (Dec 10). Excalibur is completed (Dec 23).", "w"], ["Cold War and the Belkan decline · 1970–1994", "1995", "The Skully Islands rebellion is crushed after Robert Tyler hires Scarface Squadron.", "w"], ["Belkan War · 1995", "Mar 25", "Belka invades all neighbouring countries, starting the Belkan War.", "w"], ["Belkan War · 1995", "Mar 27", "Heinreich's Indigo Squadron takes Model in Gebet.", "m"], ["Belkan War · 1995", "Mar 30", "Nearly all of Ustio falls; only the mountain regions hold. Ustio hires foreign mercenaries.", "m"], ["Belkan War · 1995", "Apr 1–3", "Osea and neighbours, including Ustio, form the Allied Forces. Osea speeds up SOLG construction.", "w"], ["Belkan War · 1995", "Apr 2", "Operation Crossbow: Galm Team and mercenaries defend Valais Air Base.", "m"], ["Belkan War · 1995", "Apr 15", "Operation Roselein secures Route 171 in Sapin.", "n"], ["Belkan War · 1995", "Apr 20", "Operation Choker One decoys Belkan forces so the 3rd Osean Naval Fleet can advance.", "n"], ["Belkan War · 1995", "Apr 24", "Offensive Campaign No. 4101 captures Futuro Canal; the Kestrel is first deployed.", "m"], ["Belkan War · 1995", "May 12", "Operation Varsity: Osean paratroopers take Solis Ortus.", "n"], ["Belkan War · 1995", "May 13", "Operation Constantine liberates Directus; Ustio regains its prewar borders.", "m"], ["Belkan War · 1995", "May 17", "Operation Hell Bound begins under a \"nuclear inspection\" pretext at Mt. Ivrea; Excalibur destroys part of the Allied force.", "m"], ["Belkan War · 1995", "May 19", "Operation Dynamo fails at the Schayne Plains after Excalibur attacks.", "m"], ["Belkan War · 1995", "May 23", "Operation Judgment destroys Excalibur; Cipher of Galm Team strikes the final blow.", "w"], ["Belkan War · 1995", "May 28", "Operation Battle-Axe retakes Area B7R; Cipher earns the title \"Demon Lord\".", "m"], ["Belkan War · 1995", "Jun 1", "Operation Cannibal carpet-bombs Hoffnung.", "m"], ["Belkan War · 1995", "Jun 5", "Battle of Waldreich; the Allied assault on Sudentor begins. The Wizard and Sorcerer Squadrons vanish.", "m"], ["Belkan War · 1995", "Jun 6", "Operation Ravage stops a nuclear bomber squadron, but Belkan forces detonate seven nuclear devices in the Waldreich Mountains, killing about 12,000.", "w"], ["Belkan War · 1995", "Jun 13", "Operation Stone Age: PJ joins Cipher as Galm 2.", "n"], ["Belkan War · 1995", "Jun 20", "Operation Broom: the peace treaty ends the Belkan War at Lumen. Southern Belka becomes North Osea. The Falcons of Dawn form.", "w"], ["Belkan War · 1995", "Oct 18", "Espada Team disappears from its allied base.", "n"], ["Belkan War · 1995", "Dec 25", "Operation Valkyrie: AWWNB uses the stolen XB-0 to attack Lumen and Valais; Galm Team shoots it down.", "m"], ["Belkan War · 1995", "Dec 31", "AWWNB tries to launch a V2 from Avalon Dam. Operations Thunderbolt and Point Blank destroy the control devices; Cipher defeats Foulke and the V2 detonates harmlessly.", "w"], ["Aftermath and the Usean coup · 1996–1999", "1996", "Waldemarr Rald and his faction are ousted from Belkan politics over ties to AWWNB. Blauvelt reforms the Belkan Air Force. Surviving Wizard Squadron members are killed or captured after a plot against Osea's president.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Apr 18, 1996", "Robert Tyler becomes FCU Chief of Staff.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Apr 20, 1996", "The FCU announces Ulysses, orders overseas troops home, restricts communications and begins planning an NMD response. Refugees begin leaving Usea.", "w"], ["Aftermath and the Usean coup · 1996–1999", "1997", "Heinrich Koenig is linked to the Falcons of Dawn (May).", "n"], ["Aftermath and the Usean coup · 1996–1999", "May 30, 1997", "The Usean rebellion begins and the Allies retreat west.", "w"], ["Aftermath and the Usean coup · 1996–1999", "1998", "Yuktobania starts Project Alicorn. Belkan aces serve as aggressors for other militaries (8492nd and Ofnir Squadrons). Erusean Air and Space Administration starts developing the X-02.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Mar 20, 1998", "Operation Fighter's Honor: Scarface Squadron is hired; Phoenix protects the Twinkle Islands.", "w"], ["Aftermath and the Usean coup · 1996–1999", "Apr 5, 1998", "Operation Anchorhead Freedom retakes Anchorhead.", "n"], ["Aftermath and the Usean coup · 1996–1999", "Apr 14, 1998", "The Keep and Opera House are destroyed; John Hervard and Kei Nagase join Phoenix.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Jun 19, 1998", "Stonehenge base construction is completed.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Jul 7, 1998", "Scarface destroys the defecting 2nd Fleet and Cocoon Squadron.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Jul 29, 1998", "Ulysses is found to be hollow; Estovakia begins work on the Chandelier.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Aug 3–4, 1998", "Operations Alphaville and Bellissima begin in southeastern and northern Usea.", "n"], ["Aftermath and the Usean coup · 1996–1999", "Aug 30, 1998", "The Rebels' anti-asteroid laser is stopped; Snider's Top falls, opening the path to Saint Ark.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Sep 7, 1998", "Scarface strikes Saint Ark; Phoenix destroys the submarine Folkvangr and its cruise missile.", "m"], ["Aftermath and the Usean coup · 1996–1999", "Sep 18, 1998", "Fortress Intolerance's ICBM is stopped; the coup ends.", "w"], ["Aftermath and the Usean coup · 1996–1999", "Sep 20, 1998", "Titan Guns is published; Emmeria begins an evacuation shelter at Gracemeria Castle.", "n"], ["Aftermath and the Usean coup · 1996–1999", "1999", "Ehren Ziegler unveils the painting \"Demon Lord\" at the Cinigrad Art Festival. A Belkan officer reveals Amy Pitt was a double agent for the Osean CIA.", "n"]];
+const root=document.getElementById("timeline");if(!root)return;
+const scroll=document.getElementById("tlscroll"),qEl=document.getElementById("tlq"),chipsEl=document.getElementById("tlchips"),st=document.getElementById("tlstatus");
+let showMinor=true,fq="";
+function rows(){
+  const out=[];
+  let lastEra=null;
+  STATIC.forEach(([era,d,t,k])=>out.push({era,when:d,text:t,kind:k}));
+  if(typeof GAMES!=="undefined"){
+    GAMES.filter(g=>g.year>=1999).slice().sort((a,b)=>a.year-b.year).forEach(g=>{
+      const era=g.war+" · "+g.year;
+      out.push({era,when:String(g.year),text:g.title,kind:"w",game:g.id,head:true});
+      if(g.beats&&g.beats.length)g.beats.forEach(b=>{const m=/^((?:(?:Early|Mid|Late)[ -])?[A-Z][a-z]+(?: \d{1,2}(?:[–-]\d{1,2})?)?(?:,? \d{4})?|\d{4}(?:[–-]\d{2,4})?)\s*:\s*(.*)$/.exec(b);out.push({era,when:m?m[1]:"",text:m?m[2]:b,kind:"m"});});
+      else out.push({era,when:"",text:g.summary,kind:"m"});
+    });
+  }
+  return out;
+}
+const ALL=rows();
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function render(){
+  const q=fq.toLowerCase();let n=0,era=null,html="";
+  ALL.forEach(r=>{
+    if(!showMinor&&r.kind==="n")return;
+    if(q&&!(r.text+" "+r.when+" "+r.era).toLowerCase().includes(q))return;
+    if(r.era!==era){era=r.era;html+='<div class="era">'+esc(era.split(" · ")[0])+(era.includes(" · ")?'<small>'+esc(era.split(" · ").slice(1).join(" · "))+'</small>':'')+'</div>';}
+    n++;
+    const w=r.when?'<b>'+esc(r.when.split(",")[0])+'</b>'+(r.when.includes(",")?esc(r.when.split(",")[1].trim()):""):"";
+    const body=r.head&&r.game?'<span class="wartag">GAME</span><button class="gamelink" type="button" data-g="'+r.game+'">'+esc(r.text)+' — open briefing</button>':esc(r.text);
+    html+='<div class="row '+(r.kind==="w"?"war":r.kind==="n"?"minor":"")+'"><div class="when">'+w+'</div><div class="what">'+body+'</div></div>';
+  });
+  scroll.innerHTML=html||'<p class="empty">No entries match.</p>';
+  st.textContent=n+" entries";
+}
+const b=document.createElement("button");b.type="button";b.textContent="Minor entries: on";b.setAttribute("aria-pressed","true");
+b.onclick=()=>{showMinor=!showMinor;b.setAttribute("aria-pressed",showMinor);b.textContent="Minor entries: "+(showMinor?"on":"off");render()};
+chipsEl.appendChild(b);
+qEl.addEventListener("input",()=>{fq=qEl.value.trim();render()});
+scroll.addEventListener("click",e=>{const t=e.target.closest(".gamelink");if(!t)return;document.getElementById("tab-theatre").click();
+  if(typeof selectGame==="function")selectGame(t.dataset.g);});
+render();
+})();
+</script>
+<script>
+(function(){
+const tabs={theatre:document.getElementById("tab-theatre"),hangar:document.getElementById("tab-hangar"),timeline:document.getElementById("tab-timeline")};
+const SUB={theatre:"WAR RECORD · 1995–2040",hangar:"HANGAR · 138 AIRCRAFT",timeline:"TIMELINE · 65 MYA–2040"};
+function show(v){
+  document.querySelectorAll(".tv").forEach(el=>el.hidden=v!=="theatre");
+  document.getElementById("hangar").hidden=v!=="hangar";document.getElementById("timeline").hidden=v!=="timeline";
+  document.getElementById("readouts").hidden=v!=="theatre";
+  document.getElementById("brand-sub").textContent=SUB[v];
+  Object.keys(tabs).forEach(k=>tabs[k].setAttribute("aria-selected",k===v));
+  try{history.replaceState(null,"",v==="theatre"?location.pathname+location.search:"#"+v)}catch(e){}
+  if(v==="theatre")window.dispatchEvent(new Event("resize"));}
+tabs.theatre.onclick=()=>show("theatre");tabs.hangar.onclick=()=>show("hangar");tabs.timeline.onclick=()=>show("timeline");
+if(location.hash==="#hangar")show("hangar");else if(location.hash==="#timeline")show("timeline");
+})();
+</script>
+</body>
+</html>
