@@ -71,6 +71,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15
 .lbl.dim{color:var(--hud-dim);opacity:.55}
 .lbl.friendly{color:var(--friendly)}.lbl.hostile{color:var(--hostile)}.lbl.involved{color:var(--involved)}
 .lbl.sel{outline:1px solid currentColor;background:rgba(0,0,0,.55)}
+.lbl.lm{font-size:10px;letter-spacing:.05em;color:#dff6ff;transform:translate(-50%,-190%)}
+.lbl.lm::before{content:"◆ ";color:#dff6ff;font-size:8px}
+.lbl.lm.dim{color:var(--hud-dim);opacity:.4}
+.lbl.lm.on{color:#fff;text-shadow:0 0 6px #9fe3ff,0 0 4px #000}
+.lmtoggle{position:absolute;top:10px;right:10px;z-index:3;font-family:var(--mono);font-size:11px;letter-spacing:.08em;background:rgba(3,7,14,.75);color:var(--hud);border:1px solid var(--line);padding:6px 10px;cursor:pointer}
+.lmtoggle[aria-pressed="false"]{color:var(--muted)}
+.lmtoggle:focus-visible{outline:1px solid var(--hud);outline-offset:2px}
+.dossier .gamelink{background:none;border:none;color:var(--hud);font:inherit;cursor:pointer;padding:0;text-align:left}
 .clbl{position:absolute;transform:translate(-50%,-50%);font-family:var(--display);font-size:13px;letter-spacing:.5em;color:rgba(159,227,255,.22);white-space:nowrap;text-transform:uppercase}
 .olbl{font-family:var(--body);font-style:italic;letter-spacing:.2em;font-size:11px;color:rgba(159,227,255,.28)}
 .hud-corner{position:absolute;font-family:var(--mono);font-size:11px;color:var(--muted);pointer-events:none;letter-spacing:.06em}
@@ -214,6 +222,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--body);font-size:15
   <main class="mapwrap tv" id="mapwrap">
     <canvas id="gl" aria-label="3D map of Strangereal. Drag to rotate, scroll or pinch to zoom, tap a country marker for its record."></canvas>
     <div id="labels"></div>
+    <button class="lmtoggle" id="lmtoggle" type="button" aria-pressed="true">◆ LANDMARKS · ON</button>
     <svg class="reticle" viewBox="0 0 46 46" aria-hidden="true"><g fill="none" stroke="#9fe3ff" stroke-width="1.2"><path d="M4 14V4h10M32 4h10v10M42 32v10H32M14 42H4V32"/><circle cx="23" cy="23" r="2"/></g></svg>
     <div class="hud-corner hud-tl" id="hud-tl">AFTER OFFICIAL AC8 WORLD MAP · STYLISED</div>
     <div class="hud-corner hud-bl legend" aria-label="Legend">
@@ -516,6 +525,41 @@ const GAMES = [
   roles:{usea:"involved"},events:{usea:"The only nation the war record names is Usea, which Neucom set out to shield from General Resource's orbital lasers. The fighting is otherwise told by place, not country: Megafloat, Port Edwards, Chopinburg, Axel Bay, the Comona Islands, the Waipolo Mountains and the Geofront."},arcs:[]}
 ];
 
+const LANDMARKS = [
+ {id:"oured",name:"Oured",type:"Capital city",country:"osea",pos:[-72.5,-8.5],visits:[
+  ["ac5","Capital of Osea. In December 2010 the falling SOLG is aimed at it; Wardog and the Razgriz stop it, and Harling and Nikanor make peace in the city."],
+  ["ac7","One of the Osean ports and cities hit by Erusean drones hidden in shipping containers on May 15, 2019."]]},
+ {id:"bana",name:"Bana City",type:"Osean city",country:"osea",pos:[-77,-14],visits:[
+  ["ac5","Yuktobanian special forces gas the city in November 2010."],
+  ["ac7","Hit by Erusean container drones at the start of the Lighthouse War, May 2019."]]},
+ {id:"sthewlett",name:"St. Hewlett",type:"Osean port",country:"osea",pos:[-65,-2],visits:[
+  ["ac5","Yuktobania hits the port in late September 2010, soon after declaring war."],
+  ["ac7","Hit by Erusean container drones on May 15, 2019."]]},
+ {id:"sudentor",name:"Sudentor",type:"Belkan site",country:"belka",pos:[-63,-24],visits:[
+  ["zero","The Allied assault on Sudentor begins on June 5, 1995, as the Belkan War turns toward its end."],
+  ["ac5","Gründer's Sudentor tunnel holds the controls for the SOLG; the Razgriz destroy them on December 30, 2010."]]},
+ {id:"waldreich",name:"Waldreich Mountains",type:"Mountain range",country:"belka",pos:[-57,-26],visits:[
+  ["zero","As the Allies close in on June 5–6, 1995, Belka detonates seven V1 nuclear weapons here, killing over 12,000. In December, Cipher and PJ destroy the hijacked Hresvelgr over the same range."]]},
+ {id:"stonehenge",name:"Stonehenge",type:"Railgun battery",country:"usea",pos:[-23,-5],visits:[
+  ["ulysses","Built to shoot down fragments of Ulysses; its railguns defend against the worst of the impacts."],
+  ["ac2","Construction of the base is completed in June 1998, and a photo of it under construction is taken in September."],
+  ["ac04","Erusea invades San Salvacion and seizes Stonehenge in summer 2003, turning the railguns on aircraft."],
+  ["ac7","Mid-August 2019: Stonehenge shoots down the Arsenal Bird Liberty."]]},
+ {id:"lighthouse",name:"The Lighthouse",type:"Space elevator",country:"usea",pos:[-9,-11],visits:[
+  ["ac04","Epilogue: recovery in the 2010s comes with the space elevator, whose controversy leads to the Lighthouse War."],
+  ["ac7","The International Space Elevator in the Gunther region. Erusea seizes it on May 15, 2019, and it is the site of the war's last battle."],
+  ["ac8","The FCU's wealthy west lies near the space elevator, and it is damaged during the Sotoa–Usea War."]]},
+ {id:"anchorhead",name:"Anchorhead",type:"City and bay",country:"usea",pos:[-12,-3],visits:[
+  ["ac2","Retaken with Axel Bay in Operation Anchorhead Freedom, April 5, 1998, sinking a rebel carrier."],
+  ["ahl","Retold in the Allied counter-offensive that retakes Axel Bay, Anchorhead and Saint Ark."],
+  ["ac7","Appears on billboards in the game, per the Ace Combat Wiki."]]},
+ {id:"comona",name:"Comona Islands",type:"Island group and base",country:"usea",pos:[-13,14],visits:[
+  ["ac2","Operation Alphaville takes out an anti-asteroid laser at the Comona Islands in August 1998."],
+  ["ac3","Named among the places the Corporate War is told through."],
+  ["ac8","Tonitrus launches from Comona Base in January 2029; a shuttle from the base cripples Tonitrus No. 2 in February 2030."]]}
+];
+const LM={};LANDMARKS.forEach(l=>LM[l.id]=l);
+
 const CONTINENTS = [
  {name:"North Osea",at:[-85.3, -4.8],blobs:[[-101.6,-18.2,6.94],[-104.5,-9.6,5.95],[-96.8,-10.5,7.44],[-92.0,-24.0,7.44],[-93.9,-33.5,6.45],[-86.3,-37.4,6.45],[-78.6,-34.5,6.45],[-84.3,-27.8,8.43],[-76.7,-24.9,8.43],[-69.0,-27.8,7.44],[-67.1,-20.1,8.43],[-77.6,-14.4,8.93],[-86.3,-8.6,8.43],[-93.9,-3.8,5.46],[-76.7,-5.8,6.45],[-68.1,-8.6,7.44],[-60.4,-16.3,7.94],[-57.5,-23.0,6.45],[-51.8,-19.2,7.94],[-49.8,-11.5,7.94],[-57.5,-8.6,6.94],[-44.1,-21.1,6.45],[-39.3,-18.2,5.46],[-35.5,-16.3,2.73],[-45.0,-8.6,6.45],[-57.5,-2.9,4.46],[-51.8,-4.8,4.46],[-69.0,-2.9,3.47],[-84.3,-2.9,3.97],[-100.6,-3.8,3.47],[-107.4,-14.4,3.47],[-107.0,-6.7,4.96],[-109.3,-2.5,3.47],[-101.6,-37.4,3.97],[-96.8,-41.2,3.97]]},
  {name:"Wellow",at:[-61.9, -58.5],blobs:[[-66.1,-50.8,5.95],[-59.4,-47.9,5.95],[-63.3,-43.1,5.46],[-69.0,-45.0,3.97],[-57.5,-54.6,3.47],[-72.5,-54.3,2.98],[-55.6,-41.2,3.47],[-62.9,-37.8,3.47],[-62.1,-35.1,2.23]]},
@@ -574,7 +618,16 @@ const dos=document.getElementById("dossier");
 function chip(id,role){const c=COUNTRIES[id];return `<button type="button" class="chip ${role||""}" data-c="${id}">${c.short}</button>`}
 function renderDossier(){
   const H=document.getElementById("intel-h"),C=document.getElementById("intel-code");
-  if(selCountry){
+  if(selLandmark){
+    const l=LM[selLandmark],c=COUNTRIES[l.country];
+    H.textContent="Landmark";C.textContent=l.type.toUpperCase();
+    dos.innerHTML=`<button type="button" class="back" id="back">◂ BACK</button>
+      <div><div class="eyebrow">${l.type} · ${c.cont}</div><h2>${l.name}</h2></div>
+      <dl class="facts"><dt>NATION</dt><dd><button type="button" class="chip" data-c="${l.country}">${c.short}</button></dd><dt>APPEARS IN</dt><dd>${l.visits.length} ${l.visits.length>1?"records":"record"}</dd></dl>
+      <div class="entries">${l.visits.map(([gid,t])=>{const g=gameById[gid];return `<div class="entry"><h3><span class="y">${g.year}</span><button type="button" class="gamelink" data-gm="${gid}">${g.title}</button></h3><p>${t}</p></div>`}).join("")}</div>
+      <p class="note">Marker position is approximate: it sits inside the right nation, not on an exact spot.</p>`;
+    document.getElementById("back").onclick=()=>selectLandmark(null);
+  } else if(selCountry){
     const c=COUNTRIES[selCountry];
     const list=GAMES.filter(g=>g.events[selCountry]);
     H.textContent="Nation dossier";C.textContent=c.short;
@@ -601,16 +654,21 @@ function renderDossier(){
     dos.innerHTML=`<div><div class="eyebrow">Strangereal · ${GAMES.filter(g=>g.kind==="game").length} games · ${GAMES.filter(g=>g.kind==="incident").length} incidents</div><h2>Every war, every nation</h2></div>
       <p>Pick an operation on the left to see who fought whom, or tap a marker on the map for that nation's full record across every game.</p>
       ${Object.entries(conts).map(([k,ids])=>`<div><div class="eyebrow" style="margin-bottom:6px">${k}</div><div class="chips">${ids.map(i=>chip(i)).join("")}</div></div>`).join("")}
+      <div><div class="eyebrow" style="margin-bottom:6px">Key locations · tap to locate</div><div class="chips">${LANDMARKS.map(l=>`<button type="button" class="chip" data-lm="${l.id}">${l.name.toUpperCase()}</button>`).join("")}</div></div>
       <p class="note">Laid out after the official world map from Ace Combat 8, drawn in a simplified tile style.</p>`;
   }
   dos.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>selectCountry(b.dataset.c));
+  dos.querySelectorAll("[data-lm]").forEach(b=>b.onclick=()=>selectLandmark(b.dataset.lm));
+  dos.querySelectorAll("[data-gm]").forEach(b=>b.onclick=()=>selectGame(b.dataset.gm));
   dos.parentElement.scrollTop=0;
 }
 
-function selectGame(id){selGame=id;selCountry=null;renderMissions();renderDossier();updateReadouts();applyScene();
+function selectGame(id){selGame=id;selCountry=null;selLandmark=null;renderMissions();renderDossier();updateReadouts();applyScene();
   if(id){const ids=Object.keys(gameById[id].roles);const pts=ids.map(i=>COUNTRIES[i].pos);flyTo(pts.reduce((a,p)=>a+p[0],0)/pts.length,pts.reduce((a,p)=>a+p[1],0)/pts.length,ids.length>1?95:70)}
   else flyTo(0,2,175);}
-function selectCountry(id){selCountry=id;renderDossier();applyScene();if(id){const p=COUNTRIES[id].pos;flyTo(p[0],p[1],70)}}
+let selLandmark=null;
+function selectLandmark(id){selLandmark=id;selCountry=null;renderDossier();applyScene();if(id){const p=LM[id].pos;flyTo(p[0],p[1],55)}}
+function selectCountry(id){selLandmark=null;selCountry=id;renderDossier();applyScene();if(id){const p=COUNTRIES[id].pos;flyTo(p[0],p[1],70)}}
 
 /* ---------- 3D ---------- */
 const canvas=document.getElementById("gl"),wrap=document.getElementById("mapwrap"),labelsEl=document.getElementById("labels");
@@ -670,6 +728,25 @@ Object.entries(COUNTRIES).forEach(([id,c])=>{
   markers[id]={g,mat,beamMat,ring,pulse,gem,el,v:new THREE.Vector3(x,c.minor?8:12,z),state:"none",minor:!!c.minor};
 });
 
+// landmarks
+const lmarkers={};let lmOn=true;
+try{lmOn=localStorage.getItem("sr-landmarks")!=="off"}catch(e){}
+LANDMARKS.forEach(l=>{
+  const g=new THREE.Group();g.position.set(l.pos[0],0,l.pos[1]);
+  const mat=new THREE.MeshBasicMaterial({color:0xdff6ff,transparent:true,opacity:.95});
+  const pin=new THREE.Mesh(new THREE.ConeGeometry(.55,1.6,4),mat);pin.rotation.x=Math.PI;pin.position.y=4.2;
+  const stem=new THREE.Mesh(new THREE.CylinderGeometry(.06,.06,3.4,6),new THREE.MeshBasicMaterial({color:0xdff6ff,transparent:true,opacity:.5}));stem.position.y=1.7;
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.9,1.2,4),new THREE.MeshBasicMaterial({color:0xdff6ff,transparent:true,opacity:.7,side:THREE.DoubleSide,depthWrite:false}));ring.rotation.x=-Math.PI/2;ring.position.y=.3;
+  const hit=new THREE.Mesh(new THREE.SphereGeometry(2.4,8,8),new THREE.MeshBasicMaterial({visible:false}));hit.position.y=3;hit.userData.lm=l.id;
+  g.add(pin,stem,ring,hit);scene.add(g);hitTargets.push(hit);
+  const el=document.createElement("div");el.className="lbl lm";el.textContent=l.name;el.onclick=()=>selectLandmark(l.id);labelsEl.appendChild(el);
+  lmarkers[l.id]={g,pin,mat,el,hit,v:new THREE.Vector3(l.pos[0],5.2,l.pos[1]),state:"none"};
+});
+function setLandmarks(on){lmOn=on;Object.values(lmarkers).forEach(m=>{m.g.visible=on;m.el.hidden=!on;m.hit.visible=true});
+  const b=document.getElementById("lmtoggle");b.setAttribute("aria-pressed",on);b.textContent="◆ LANDMARKS · "+(on?"ON":"OFF");
+  try{localStorage.setItem("sr-landmarks",on?"on":"off")}catch(e){}}
+document.getElementById("lmtoggle").onclick=()=>setLandmarks(!lmOn);
+
 // arcs
 const arcGroup=new THREE.Group();scene.add(arcGroup);let arcs=[];
 function makeArc(a,b,color){
@@ -691,6 +768,10 @@ function applyScene(){
     m.mat.opacity=r==="dim"?.25:.95;m.beamMat.opacity=r==="dim"?.06:.3;m.ring.material.opacity=r==="dim"?.15:.6;
     m.el.className="lbl"+(r==="dim"||(r==="none"&&m.minor)?" dim":"")+(COL[r]&&r!=="none"?" "+r:"")+(selCountry===id?" sel":"");
   });
+  Object.entries(lmarkers).forEach(([id,m])=>{
+    const st=g?(LM[id].visits.some(v=>v[0]===g.id)?"on":"dim"):(selLandmark===id?"on":"none");m.state=st;
+    m.mat.opacity=st==="dim"?.25:.95;m.el.className="lbl lm"+(st==="dim"?" dim":st==="on"?" on":"")+(selLandmark===id?" sel":"");
+  });
   arcGroup.clear();arcs=[];
   if(g)g.arcs.forEach(([a,b])=>arcs.push(makeArc(COUNTRIES[a].pos,COUNTRIES[b].pos,0xff4f4f)));
 }
@@ -709,7 +790,7 @@ canvas.addEventListener("pointerdown",e=>{down=[e.clientX,e.clientY]});
 canvas.addEventListener("pointerup",e=>{
   if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
   const r=canvas.getBoundingClientRect();ptr.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);
-  ray.setFromCamera(ptr,camera);const hit=ray.intersectObjects(hitTargets)[0];if(hit)selectCountry(hit.object.userData.id);
+  ray.setFromCamera(ptr,camera);const hit=ray.intersectObjects(hitTargets.filter(h=>h.userData.lm?lmOn:true))[0];if(hit)hit.object.userData.lm?selectLandmark(hit.object.userData.lm):selectCountry(hit.object.userData.id);
 });
 
 function resize(){const w=wrap.clientWidth,h=wrap.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()}
@@ -734,12 +815,13 @@ function loop(now){
     project(m.v,m.el);
   });
   clbls.forEach(c=>project(c.v,c.el));
+  if(lmOn)Object.values(lmarkers).forEach(m=>{m.pin.rotation.y=reduce?0:t*1.4;project(m.v,m.el)});
   arcs.forEach(a=>{a.t=(a.t+(reduce?0:.006))%1;a.head.position.copy(a.curve.getPoint(a.t))});
   renderer.render(scene,camera);requestAnimationFrame(loop);
 }
 camera.position.set(0,150,105);camera.lookAt(0,0,2);controls.target.set(0,0,2);
 
-renderMissions();renderDossier();updateReadouts();applyScene();requestAnimationFrame(loop);
+setLandmarks(lmOn);renderMissions();renderDossier();updateReadouts();applyScene();requestAnimationFrame(loop);
 </script>
 <script>
 (function(){
